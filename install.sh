@@ -262,41 +262,113 @@ PYEOF
 }
 
 register_mcp_servers() {
-  # Register the skill_manage MCP server in each CLI's .mcp.json.
-  # Idempotent: re-running is safe. Preserves user-added MCP servers.
-  python3 - <<PYEOF
-import json, os
+  # Register the skill_manage MCP server in each CLI's native config.
+  # Format differs per CLI — see comments below.
+  export _SS_SYSTEM_ROOT="${SYSTEM_ROOT}"
+  export _SS_MCP_BIN="${SYSTEM_ROOT}/bin/skill-manage-mcp"
+  export _SS_HOME="${HOME}"
+  export _SS_CC_DIR="${HOME}/.claude/skills"
+  export _SS_OC_DIR="${HOME}/.config/opencode/skills"
+  export _SS_CDX_DIR="${HOME}/.codex/skills"
+  python3 - <<'PYEOF'
+import json, os, re
 from pathlib import Path
 
 SERVER_NAME = "skill-system"
-SYSTEM_ROOT = "${SYSTEM_ROOT}"
-MCP_BIN = f"{SYSTEM_ROOT}/bin/skill-manage-mcp"
+SYSTEM_ROOT = os.environ["_SS_SYSTEM_ROOT"]
+MCP_BIN = os.environ["_SS_MCP_BIN"]
+HOME = os.environ["_SS_HOME"]
+CC_DIR = os.environ["_SS_CC_DIR"]
+OC_DIR = os.environ["_SS_OC_DIR"]
+CDX_DIR = os.environ["_SS_CDX_DIR"]
 
-cli_configs = [
-    ("claude-code", "${HOME}/.claude/.mcp.json",      "${HOME}/.claude/skills"),
-    ("opencode",    "${HOME}/.config/opencode/.mcp.json", "${HOME}/.config/opencode/skills"),
-    ("codex",       "${HOME}/.codex/.mcp.json",        "${HOME}/.codex/skills"),
-]
-
-server_entry = {
+# ---------- Claude Code ----------
+# Reads ~/.claude/.mcp.json, key "mcpServers", value {command, args, env}.
+cc_path = Path(HOME) / ".claude" / ".mcp.json"
+try:
+    cc_cfg = json.loads(cc_path.read_text()) if cc_path.exists() else {}
+except Exception:
+    cc_cfg = {}
+cc_servers = cc_cfg.setdefault("mcpServers", {})
+cc_servers[SERVER_NAME] = {
     "command": MCP_BIN,
     "args": [],
-    "env": {},  # SKILLS_DIR set per-CLI below
+    "env": {"SKILLS_DIR": CC_DIR},
 }
+cc_path.write_text(json.dumps(cc_cfg, indent=2))
+print(f"  registered in {cc_path} (Claude Code format)")
 
-for cli, mcp_path, skills_dir in cli_configs:
-    p = Path(mcp_path)
-    p.parent.mkdir(parents=True, exist_ok=True)
+# ---------- OpenCode ----------
+# Reads ~/.config/opencode/opencode.json, key "mcp", value
+# {type:"local", command:[array], environment, enabled}.  NOT .mcp.json.
+oc_path = Path(HOME) / ".config" / "opencode" / "opencode.json"
+try:
+    oc_cfg = json.loads(oc_path.read_text()) if oc_path.exists() else {}
+except Exception:
+    oc_cfg = {}
+# Add $schema only if file is empty (informational; OpenCode doesn't require it)
+if not oc_cfg:
+    oc_cfg["$schema"] = "https://opencode.ai/config.json"
+oc_mcp = oc_cfg.setdefault("mcp", {})
+oc_mcp[SERVER_NAME] = {
+    "type": "local",
+    "command": [MCP_BIN],
+    "environment": {"SKILLS_DIR": OC_DIR},
+    "enabled": True,
+}
+oc_path.write_text(json.dumps(oc_cfg, indent=2, ensure_ascii=False))
+print(f"  registered in {oc_path} (OpenCode format)")
+
+# Clean up legacy .mcp.json from earlier install versions
+oc_legacy = Path(HOME) / ".config" / "opencode" / ".mcp.json"
+if oc_legacy.exists():
     try:
-        cfg = json.loads(p.read_text()) if p.exists() else {}
+        legacy = json.loads(oc_legacy.read_text())
+        legacy.pop("mcpServers", None)
+        if not legacy:
+            oc_legacy.unlink()
+        else:
+            oc_legacy.write_text(json.dumps(legacy, indent=2))
+        print(f"  cleaned up legacy {oc_legacy}")
     except Exception:
-        cfg = {}
-    servers = cfg.setdefault("mcpServers", {})
-    entry = dict(server_entry)
-    entry["env"] = {"SKILLS_DIR": skills_dir}
-    servers[SERVER_NAME] = entry
-    p.write_text(json.dumps(cfg, indent=2))
-    print(f"  registered MCP server in {mcp_path}")
+        pass
+
+# ---------- Codex ----------
+# Reads ~/.codex/config.toml, table [mcp_servers.<name>] with
+# command, args, startup_timeout_sec, and nested [mcp_servers.<name>.env].
+# NOT .mcp.json.  We rewrite the .toml via a careful manual edit.
+codex_toml = Path(HOME) / ".codex" / "config.toml"
+if codex_toml.exists():
+    text = codex_toml.read_text()
+    pattern = re.compile(
+        r"\[mcp_servers\.skill-system\].*?(?=\n\[|\Z)",
+        re.DOTALL,
+    )
+    text = pattern.sub("", text).rstrip() + "\n\n"
+    block = (
+        "[mcp_servers.skill-system]\n"
+        f'command = "{MCP_BIN}"\n'
+        "args = []\n"
+        "startup_timeout_sec = 30\n\n"
+        "[mcp_servers.skill-system.env]\n"
+        f'SKILLS_DIR = "{CDX_DIR}"\n\n'
+    )
+    codex_toml.write_text(text + block)
+    print(f"  registered in {codex_toml} (Codex TOML format)")
+
+# Clean up legacy .mcp.json
+codex_legacy = Path(HOME) / ".codex" / ".mcp.json"
+if codex_legacy.exists():
+    try:
+        legacy = json.loads(codex_legacy.read_text())
+        legacy.pop("mcpServers", None)
+        if not legacy:
+            codex_legacy.unlink()
+        else:
+            codex_legacy.write_text(json.dumps(legacy, indent=2))
+        print(f"  cleaned up legacy {codex_legacy}")
+    except Exception:
+        pass
 
 print()
 print("  Restart Claude Code / OpenCode / Codex to activate the new MCP tool.")
@@ -306,29 +378,52 @@ PYEOF
 
 unregister_mcp_servers() {
   python3 - <<PYEOF
-import json, os
+import json, re
 from pathlib import Path
 
 SERVER_NAME = "skill-system"
-paths = [
-    "${HOME}/.claude/.mcp.json",
-    "${HOME}/.config/opencode/.mcp.json",
-    "${HOME}/.codex/.mcp.json",
-]
-for p in paths:
-    pp = Path(p)
-    if not pp.exists():
-        continue
+
+# Claude Code: .mcp.json
+p = Path("${HOME}/.claude/.mcp.json")
+if p.exists():
     try:
-        cfg = json.loads(pp.read_text())
+        cfg = json.loads(p.read_text())
+        servers = cfg.get("mcpServers", {})
+        if SERVER_NAME in servers:
+            del servers[SERVER_NAME]
+            if not servers:
+                cfg.pop("mcpServers", None)
+            p.write_text(json.dumps(cfg, indent=2))
+            print(f"  removed MCP server from {p}")
     except Exception:
-        continue
-    servers = cfg.get("mcpServers", {})
-    if SERVER_NAME in servers:
-        del servers[SERVER_NAME]
-        if not servers:
-            cfg.pop("mcpServers", None)
-        pp.write_text(json.dumps(cfg, indent=2))
+        pass
+
+# OpenCode: opencode.json
+p = Path("${HOME}/.config/opencode/opencode.json")
+if p.exists():
+    try:
+        cfg = json.loads(p.read_text())
+        mcp = cfg.get("mcp", {})
+        if SERVER_NAME in mcp:
+            del mcp[SERVER_NAME]
+            if not mcp:
+                cfg.pop("mcp", None)
+            p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+            print(f"  removed MCP server from {p}")
+    except Exception:
+        pass
+
+# Codex: config.toml (manual block removal)
+p = Path("${HOME}/.codex/config.toml")
+if p.exists():
+    text = p.read_text()
+    pattern = re.compile(
+        r"\[mcp_servers\.skill-system\]\n.*?(?=\n\[|\Z)",
+        re.DOTALL,
+    )
+    new_text = pattern.sub("", text)
+    if new_text != text:
+        p.write_text(new_text)
         print(f"  removed MCP server from {p}")
 PYEOF
 }
