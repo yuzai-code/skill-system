@@ -41,8 +41,12 @@ Point the user to `/learn` — do not call skill_manage directly unless asked.
 
 ## Tools available
 
-- `skill_manage` (6 actions: create, edit, patch, delete, write_file,
-  remove_file) — see `~/.claude/commands/skill-manage.md`
+- **`skill_manage` — registered as a native MCP tool** (NOT a shell script).
+  When you see `skill_manage` in your available tools list, call it directly
+  with structured arguments: `skill_manage(action="create", name="x", content="...")`.
+  The MCP server at `~/.skill-system/bin/skill-manage-mcp` handles all 6 actions
+  with HARD-constraint validation. Schema is in your tool list; descriptions
+  document the 60-char limit and `hermes-skill-system` author requirement.
 - `/learn` slash command — see `~/.claude/commands/learn.md`
 - Hooks: `UserPromptSubmit` injects skill index, `PostToolUse` refreshes
   after skill_manage, `Stop` triggers curator --maybe-run
@@ -55,3 +59,4 @@ Point the user to `/learn` — do not call skill_manage directly unless asked.
 - ❌ Use raw shell commands in skill body when a wrapped tool exists
 - ❌ Hard-delete a skill — they archive to `~/.claude/skills/.archive/`
 - ❌ Touch a pinned skill (`hermes-skill-system skill pin <name>` to unpin)
+- ❌ Call `skill_manage` via Bash/terminal — it's a native MCP tool, use it directly

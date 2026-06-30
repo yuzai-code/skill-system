@@ -9,7 +9,11 @@ storage, shared system code.
 ## What you get
 
 - **`/learn <description>`** in any CLI — author a new skill
-- **`skill_manage` tool** with 6 actions (create/edit/patch/delete/write_file/remove_file)
+- **`skill_manage` as a native MCP tool** — registered in each CLI's `.mcp.json`,
+  not a shell-script wrapper. Agent calls it with structured arguments:
+  `skill_manage(action="create", name="arxiv-search", content="---...---")`
+- **6 actions** with HARD-constraint validation: create / edit / patch / delete
+  / write_file / remove_file
 - **Curator** that runs inactivity-triggered, archives skills unused > 90d
 - **Skill index** auto-injected into every prompt (truncated at 60-char description)
 - **Archive-not-delete** — every `delete` is reversible from `~/.{cli}/skills/.archive/`
@@ -17,8 +21,8 @@ storage, shared system code.
 ## Architecture
 
 ```
-~/.skill-system/                        # shared system code (one source of truth)
-├── lib/                                # 8 Python modules
+~/.skill-system/                          # shared system code (one source of truth)
+├── lib/                                  # Python modules
 │   ├── paths.py          # per-CLI path resolution
 │   ├── yaml_mini.py      # frontmatter parser (no PyYAML needed)
 │   ├── schema.py         # SKILL.md validation (HARD 60-char description)
@@ -28,21 +32,30 @@ storage, shared system code.
 │   ├── skill_usage.py    # .usage.json sidecar with fcntl lock
 │   ├── skill_manage.py   # 6 actions, 6-layer validation
 │   ├── skill_index.py    # prompt-injectable index
-│   └── skill_curator.py  # inactivity-triggered state machine
-├── bin/                                # CLI entry points
-│   ├── skill            # main CLI (list/view/init/sync/doctor/index)
-│   ├── skill-manage     # skill_manage tool backend
-│   └── skill-curator    # curator runner
-├── commands/                            # per-CLI config templates
+│   ├── skill_curator.py  # inactivity-triggered state machine
+│   └── mcp_server.py     # MCP server (skill_manage as native tool)
+├── bin/                                  # CLI entry points
+│   ├── skill              # main CLI (list/view/init/sync/doctor/index)
+│   ├── skill-manage       # skill_manage shell backend (for direct CLI use)
+│   ├── skill-curator      # curator runner
+│   └── skill-manage-mcp   # MCP server entry (used by Claude Code etc.)
+├── commands/                              # per-CLI config templates
 │   ├── claude-code/CLAUDE.md + commands/{learn,skill-manage}.md
 │   ├── opencode/instructions.md + commands/{learn,skill-manage}.md
 │   └── codex/AGENTS.md + prompts/{learn,skill-manage}.md
-├── hooks/                              # hook scripts
-└── install.sh                          # installer
+├── hooks/                                # hook scripts
+├── tests/
+│   ├── test_smoke.py     # 31 assertions, core library end-to-end
+│   └── test_mcp.py       # 10 assertions, MCP server end-to-end (subprocess)
+└── install.sh                            # installer + MCP registration
 
-~/.claude/skills/                       # per-CLI storage (each keeps its own)
-~/.config/opencode/skills/              # symlink-friendly
-~/.codex/skills/                        # ...
+~/.claude/skills/                         # per-CLI storage (each keeps its own)
+~/.config/opencode/skills/                # symlink-friendly
+~/.codex/skills/                          # ...
+
+~/.claude/.mcp.json                       # registers skill-system MCP server
+~/.config/opencode/.mcp.json
+~/.codex/.mcp.json
 ```
 
 ## Install

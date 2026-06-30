@@ -23,10 +23,13 @@ jobs:
       - name: Run smoke tests
         run: python3 tests/test_smoke.py
 
+      - name: Run MCP server end-to-end tests
+        run: python3 tests/test_mcp.py
+
       - name: Verify CLI entry points are executable
         run: |
-          chmod +x bin/skill bin/skill-manage bin/skill-curator
-          test -x bin/skill && test -x bin/skill-manage && test -x bin/skill-curator
+          chmod +x bin/skill bin/skill-manage bin/skill-curator bin/skill-manage-mcp
+          test -x bin/skill && test -x bin/skill-manage && test -x bin/skill-curator && test -x bin/skill-manage-mcp
 
       - name: Lint Python (syntax-only, no external deps)
         run: |

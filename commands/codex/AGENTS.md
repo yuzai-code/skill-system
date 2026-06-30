@@ -25,6 +25,16 @@ corrections OR revealed a non-obvious workflow, OFFER:
 > "Should I save this workflow as a skill? It will be reusable next time
 > you ask for <detected-task>. Run /learn to capture it."
 
+## Tools available
+
+- **`skill_manage` — registered as a native MCP tool** (NOT a shell script).
+  When you see `skill_manage` in your available tools list, call it directly
+  with structured arguments: `skill_manage(action="create", name="x", content="...")`.
+  The MCP server at `~/.skill-system/bin/skill-manage-mcp` handles all 6 actions
+  with HARD-constraint validation. Schema is in your tool list; descriptions
+  document the 60-char limit and `hermes-skill-system` author requirement.
+- ❌ Do NOT invoke `skill_manage` via Bash/terminal — it's a native MCP tool.
+
 ## SKILL.md HARD constraints
 
 - `description` MUST be ≤60 characters.

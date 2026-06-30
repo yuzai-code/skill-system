@@ -261,6 +261,78 @@ print("  registered hooks in ~/.claude/settings.json")
 PYEOF
 }
 
+register_mcp_servers() {
+  # Register the skill_manage MCP server in each CLI's .mcp.json.
+  # Idempotent: re-running is safe. Preserves user-added MCP servers.
+  python3 - <<PYEOF
+import json, os
+from pathlib import Path
+
+SERVER_NAME = "skill-system"
+SYSTEM_ROOT = "${SYSTEM_ROOT}"
+MCP_BIN = f"{SYSTEM_ROOT}/bin/skill-manage-mcp"
+
+cli_configs = [
+    ("claude-code", "${HOME}/.claude/.mcp.json",      "${HOME}/.claude/skills"),
+    ("opencode",    "${HOME}/.config/opencode/.mcp.json", "${HOME}/.config/opencode/skills"),
+    ("codex",       "${HOME}/.codex/.mcp.json",        "${HOME}/.codex/skills"),
+]
+
+server_entry = {
+    "command": MCP_BIN,
+    "args": [],
+    "env": {},  # SKILLS_DIR set per-CLI below
+}
+
+for cli, mcp_path, skills_dir in cli_configs:
+    p = Path(mcp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        cfg = json.loads(p.read_text()) if p.exists() else {}
+    except Exception:
+        cfg = {}
+    servers = cfg.setdefault("mcpServers", {})
+    entry = dict(server_entry)
+    entry["env"] = {"SKILLS_DIR": skills_dir}
+    servers[SERVER_NAME] = entry
+    p.write_text(json.dumps(cfg, indent=2))
+    print(f"  registered MCP server in {mcp_path}")
+
+print()
+print("  Restart Claude Code / OpenCode / Codex to activate the new MCP tool.")
+print("  After restart, the agent sees a native `skill_manage` tool with 6 actions.")
+PYEOF
+}
+
+unregister_mcp_servers() {
+  python3 - <<PYEOF
+import json, os
+from pathlib import Path
+
+SERVER_NAME = "skill-system"
+paths = [
+    "${HOME}/.claude/.mcp.json",
+    "${HOME}/.config/opencode/.mcp.json",
+    "${HOME}/.codex/.mcp.json",
+]
+for p in paths:
+    pp = Path(p)
+    if not pp.exists():
+        continue
+    try:
+        cfg = json.loads(pp.read_text())
+    except Exception:
+        continue
+    servers = cfg.get("mcpServers", {})
+    if SERVER_NAME in servers:
+        del servers[SERVER_NAME]
+        if not servers:
+            cfg.pop("mcpServers", None)
+        pp.write_text(json.dumps(cfg, indent=2))
+        print(f"  removed MCP server from {p}")
+PYEOF
+}
+
 print_path_instructions() {
   cat <<'PATH'
 
@@ -284,6 +356,9 @@ if [[ "${UNINSTALL}" -eq 1 ]]; then
   for cli in claude-code opencode codex; do
     run_or_all "${cli}" && uninstall_cli "${cli}"
   done
+  echo ""
+  echo ">> Unregistering MCP server"
+  unregister_mcp_servers
   echo ""
   echo "Uninstalled config files. Source code at ${SYSTEM_ROOT} is preserved."
   echo "To fully remove: rm -rf ${SYSTEM_ROOT}"
@@ -317,6 +392,11 @@ chmod +x "${SYSTEM_ROOT}"/bin/* "${SYSTEM_ROOT}"/hooks/*.sh 2>/dev/null || true
 for cli in claude-code opencode codex; do
   run_or_all "${cli}" && install_cli "${cli}"
 done
+
+# Register MCP server in all 3 CLIs' .mcp.json (idempotent)
+echo ""
+echo ">> Registering MCP server (skill_manage as native tool)"
+register_mcp_servers
 
 # Doctor
 echo ""

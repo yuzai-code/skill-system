@@ -2,6 +2,45 @@
 
 All notable changes to hermes-skill-system.
 
+## [1.1.0] - 2026-06-30
+
+### Added
+
+- **MCP server** (`lib/mcp_server.py` + `bin/skill-manage-mcp`):
+  - Implements Model Context Protocol over stdio (JSON-RPC 2.0, NDJSON)
+  - Exposes `skill_manage` as a **native tool** (not a shell script wrapper)
+  - Handles `initialize`, `ping`, `tools/list`, `tools/call`, `notifications/initialized`
+  - Tool schema documents HARD constraints in description (60-char limit,
+    author requirement, 8-section body)
+  - Zero external deps (no `mcp` PyPI package — implements wire protocol directly)
+- **MCP server tests** (`tests/test_mcp.py`): 10 assertions covering initialize
+  handshake, tools/list schema, tools/call for all 6 actions, HARD-constraint
+  rejection, JSON-RPC error codes (-32601, -32602)
+- **MCP auto-registration** (`install.sh`):
+  - `register_mcp_servers()` writes to `~/.claude/.mcp.json`,
+    `~/.config/opencode/.mcp.json`, `~/.codex/.mcp.json`
+  - Idempotent: re-running is safe; preserves user-added MCP servers
+  - `unregister_mcp_servers()` runs on `--uninstall`
+- **System prompt updates** (`commands/{claude-code,opencode,codex}/*`):
+  - Agent now told `skill_manage` is a native MCP tool — call it directly,
+    don't invoke via Bash/terminal
+
+### Changed
+
+- `commands/claude-code/CLAUDE.md`, `commands/opencode/instructions.md`,
+  `commands/codex/AGENTS.md`: now describe `skill_manage` as a native MCP tool
+  with explicit "do NOT invoke via Bash" rule
+- `install.sh` quick-start mentions restarting CLIs to activate the MCP tool
+- `.github/workflows/test.yml`: now runs both `test_smoke.py` AND `test_mcp.py`
+
+### Why this matters
+
+Before v1.1.0, `skill_manage` was a shell script the agent ran via the Bash
+tool — fragile (string args, no type safety, error handling was string
+parsing). After v1.1.0, it's a proper tool: structured JSON Schema,
+typed arguments, `isError` flag in the response, agent sees it in the
+native tool list.
+
 ## [1.0.0] - 2026-06-30
 
 ### Added
