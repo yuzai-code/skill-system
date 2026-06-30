@@ -1,0 +1,22 @@
+"""
+Skill System — Hermes-style procedural memory for the three CLIs.
+
+Install:  bash ~/.skill-system/install.sh
+Uninstall: bash ~/.skill-system/install.sh --uninstall
+Doctor:   ~/.skill-system/bin/skill doctor
+
+CLI integration:
+  Claude Code : ~/.claude/CLAUDE.md + ~/.claude/settings.json hooks
+  OpenCode    : ~/.config/opencode/instructions.md + ~/.config/opencode/commands/
+  Codex       : ~/.codex/AGENTS.md + ~/.codex/prompts/
+
+Skill storage: per-CLI (each keeps its own skills/).
+  Claude Code : ~/.claude/skills/
+  OpenCode    : ~/.config/opencode/skills/
+  Codex       : ~/.codex/skills/
+
+Shared code:  ~/.skill-system/lib/
+
+The install.sh script copies the right config files into each CLI's home
+and registers hooks where the CLI supports them.
+"""

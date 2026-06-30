@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Local user state — never commit
+*.local
+*.bak
+*.tmp
+
+# Skill data — lives in per-CLI skills/ dirs (not in this repo),
+# but guard against accidental copies
+.usage.json
+.archive/
+
+# Secrets hygiene
+.env
+.env.*
+*.pem
+*.key
+
+# Test artifacts (if tests/ ever generates tmp data)
+tests/.tmp/
+tests/__pycache__/

@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""skill — main CLI for managing the skill system across CLIs.
+
+Subcommands:
+  list                : list skills (per CLI, with index summary)
+  view <name>         : show a skill (frontmatter + body)
+  init <cli>          : bootstrap CLI config (CLAUDE.md / instructions.md / AGENTS.md)
+  sync <from> <to>    : copy skills between CLIs
+  doctor              : health check (paths, parsers, validation)
+  configure           : show/edit ~/.skill-system/config.yaml
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+SYSTEM_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SYSTEM_ROOT))
+
+from lib import paths, schema, skill_index, skill_manage, skill_preprocess  # noqa: E402
+
+
+def _resolve(cli_arg: str | None) -> str:
+    if cli_arg:
+        return cli_arg
+    return paths.detect_active_cli()
+
+
+def cmd_list(args) -> int:
+    cli = _resolve(args.cli)
+    skills_dir = paths.skills_dir_for(cli)
+    if not skills_dir.exists():
+        print(f"No skills directory for {cli}: {skills_dir}")
+        return 0
+    items = skill_index.build_index(skills_dir)
+    if not items:
+        print("(no skills)")
+        return 0
+    print(f"Skills in {cli} ({skills_dir}):")
+    for item in items:
+        pinned = "📌 " if item.get("pinned") else "  "
+        state = f"[{item['state']:>8}]"
+        print(f"  {pinned}{state} {item['name']:<32} {item['description']}")
+    print(f"\nTotal: {len(items)} skills")
+    return 0
+
+
+def cmd_view(args) -> int:
+    cli = _resolve(args.cli)
+    skill_manage.configure(paths.skills_dir_for(cli))
+    skill_dir = skill_manage.find_skill(args.name)
+    if not skill_dir:
+        print(f"Skill '{args.name}' not found in {cli}")
+        return 1
+    skill_md = skill_dir / "SKILL.md"
+    content = skill_md.read_text(encoding="utf-8")
+    content = skill_preprocess.preprocess(content, skill_dir=skill_dir)
+    print(f"=== {args.name} ({skill_md}) ===")
+    print(content)
+    return 0
+
+
+def cmd_init(args) -> int:
+    cli = args.cli_target or args.cli
+    if not cli:
+        print("error: --cli or subcommand CLI required")
+        return 2
+    config_dir = paths.config_dir_for(cli)
+    config_dir.mkdir(parents=True, exist_ok=True)
+    source = SYSTEM_ROOT / "commands" / cli
+    if not source.exists():
+        print(f"No command templates for {cli} (expected at {source})")
+        return 1
+    installed = []
+    for src_file in source.iterdir():
+        dest = config_dir / src_file.name
+        if dest.exists() and not args.force:
+            print(f"  skip (exists): {dest}")
+            continue
+        shutil.copy2(src_file, dest)
+        print(f"  install: {dest}")
+        installed.append(str(dest))
+    print(f"\nInstalled {len(installed)} file(s) for {cli}.")
+    return 0
+
+
+def cmd_index(args) -> int:
+    """Render skill index text for prompt injection (UserPromptSubmit hook)."""
+    cli = _resolve(args.cli)
+    skills_dir = paths.skills_dir_for(cli)
+    print(skill_index.render_for_prompt(skills_dir))
+    return 0
+
+
+def cmd_sync(args) -> int:
+    src_dir = paths.skills_dir_for(args.from_cli)
+    dst_dir = paths.skills_dir_for(args.to_cli)
+    if not src_dir.exists():
+        print(f"Source has no skills: {src_dir}")
+        return 1
+    src_skills = [p.parent for p in src_dir.rglob("SKILL.md") if ".archive" not in p.parts]
+    copied = 0
+    for skill_dir in src_skills:
+        if ".archive" in skill_dir.parts:
+            continue
+        dest = dst_dir / skill_dir.name
+        if dest.exists() and not args.force:
+            print(f"  skip (exists): {dest}")
+            continue
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(skill_dir, dest)
+        print(f"  copy: {skill_dir.name}")
+        copied += 1
+    print(f"\nSynced {copied} skill(s) from {args.from_cli} to {args.to_cli}.")
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    cli = _resolve(args.cli)
+    skills_dir = paths.skills_dir_for(cli)
+    print(f"CLI: {cli}")
+    print(f"Skills dir: {skills_dir} {'✓' if skills_dir.exists() else '✗ (missing)'}")
+    print(f"System root: {SYSTEM_ROOT}")
+    print(f"Python: {sys.version.split()[0]}")
+    issues = 0
+    items = skill_index.build_index(skills_dir) if skills_dir.exists() else []
+    print(f"Skills found: {len(items)}")
+    for item in items:
+        try:
+            skill_manage.configure(skills_dir)
+            sd = skill_manage.find_skill(item["name"])
+            if not sd:
+                print(f"  ✗ {item['name']}: in index but not findable")
+                issues += 1
+        except Exception as e:
+            print(f"  ✗ {item['name']}: {e}")
+            issues += 1
+    if issues == 0:
+        print("\n✓ No issues found.")
+        return 0
+    print(f"\n✗ {issues} issue(s) found.")
+    return 1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Skill system CLI")
+    parser.add_argument("--cli", choices=["claude-code", "opencode", "codex"])
+
+    sub = subparsers = parser.add_subparsers(dest="cmd", required=True)
+
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--cli", choices=["claude-code", "opencode", "codex"])
+
+    p_list = sub.add_parser("list", help="list skills", parents=[common])
+    p_list.set_defaults(func=cmd_list)
+
+    p_view = sub.add_parser("view", help="view a skill", parents=[common])
+    p_view.add_argument("name")
+    p_view.set_defaults(func=cmd_view)
+
+    p_init = sub.add_parser("init", help="install CLI config files", parents=[common])
+    p_init.add_argument("cli_target", nargs="?", choices=["claude-code", "opencode", "codex"])
+    p_init.add_argument("--force", action="store_true")
+    p_init.set_defaults(func=cmd_init)
+
+    p_sync = sub.add_parser("sync", help="sync skills between CLIs", parents=[common])
+    p_sync.add_argument("from_cli", choices=["claude-code", "opencode", "codex"])
+    p_sync.add_argument("to_cli", choices=["claude-code", "opencode", "codex"])
+    p_sync.add_argument("--force", action="store_true")
+    p_sync.set_defaults(func=cmd_sync)
+
+    p_doc = sub.add_parser("doctor", help="health check", parents=[common])
+    p_doc.set_defaults(func=cmd_doctor)
+
+    p_index = sub.add_parser("index", help="render skill index for prompt injection", parents=[common])
+    p_index.set_defaults(func=cmd_index)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""skill-manage — JSON-RPC entry point for the skill_manage tool.
+
+Reads a JSON request from stdin (or --request-file), dispatches to
+skill_manage, writes JSON result to stdout. Exit code 0 on success,
+1 on tool error, 2 on usage error.
+
+Usage:
+  echo '{"action":"create",...}' | skill-manage
+  skill-manage --request-file /tmp/req.json
+  skill-manage --cli claude-code --action create --name foo --content-file SKILL.md
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+# Add system root to path
+SYSTEM_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SYSTEM_ROOT))
+
+from lib import skill_manage  # noqa: E402
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="skill_manage tool backend")
+    parser.add_argument("--cli", choices=["claude-code", "opencode", "codex"], required=True)
+    parser.add_argument("--request-file", help="Path to JSON request file")
+    parser.add_argument("--action", choices=list(skill_manage.ACTIONS) + ["restore"])
+    parser.add_argument("--name")
+    parser.add_argument("--content")
+    parser.add_argument("--content-file", help="Read content from file (for SKILL.md bodies)")
+    parser.add_argument("--category")
+    parser.add_argument("--file-path")
+    parser.add_argument("--file-content")
+    parser.add_argument("--old-string")
+    parser.add_argument("--new-string")
+    parser.add_argument("--replace-all", action="store_true")
+    parser.add_argument("--absorbed-into")
+    args = parser.parse_args()
+
+    from lib.paths import skills_dir_for
+    skills_dir = skills_dir_for(args.cli)
+    skill_manage.configure(skills_dir)
+
+    if args.request_file:
+        try:
+            req = json.loads(Path(args.request_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            print(json.dumps({"success": False, "error": f"bad request file: {e}"}))
+            return 2
+    elif args.action:
+        req = {"action": args.action, "name": args.name}
+        if args.content is not None:
+            req["content"] = args.content
+        if args.content_file:
+            try:
+                req["content"] = Path(args.content_file).read_text(encoding="utf-8")
+            except OSError as e:
+                print(json.dumps({"success": False, "error": f"read content-file: {e}"}))
+                return 2
+        if args.category is not None:
+            req["category"] = args.category
+        if args.file_path is not None:
+            req["file_path"] = args.file_path
+        if args.file_content is not None:
+            req["file_content"] = args.file_content
+        if args.old_string is not None:
+            req["old_string"] = args.old_string
+        if args.new_string is not None:
+            req["new_string"] = args.new_string
+        if args.replace_all:
+            req["replace_all"] = True
+        if args.absorbed_into is not None:
+            req["absorbed_into"] = args.absorbed_into
+    else:
+        if not sys.stdin.isatty():
+            try:
+                req = json.loads(sys.stdin.read())
+            except json.JSONDecodeError as e:
+                print(json.dumps({"success": False, "error": f"bad stdin JSON: {e}"}))
+                return 2
+        else:
+            parser.print_help()
+            return 2
+
+    action = req.get("action")
+    name = req.get("name", "")
+    if action == "restore":
+        result = skill_manage.action_restore(name)
+    else:
+        result = skill_manage.skill_manage(
+            action=action,
+            name=name,
+            content=req.get("content"),
+            category=req.get("category"),
+            file_path=req.get("file_path"),
+            file_content=req.get("file_content"),
+            old_string=req.get("old_string"),
+            new_string=req.get("new_string"),
+            replace_all=bool(req.get("replace_all")),
+            absorbed_into=req.get("absorbed_into"),
+        )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("success") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

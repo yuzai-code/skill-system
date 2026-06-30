@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""skill-curator — inactivity-triggered maintenance runner.
+
+Reads SKILLS_DIR from env. Modes:
+  --maybe-run    : gate check; only runs if interval elapsed
+  --run-once     : bypass gate, run deterministic transitions
+  --consolidate  : opt-in LLM umbrella-building pass (off by default)
+  --status       : show curator state
+  --pause / --resume
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+SYSTEM_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SYSTEM_ROOT))
+
+from lib import skill_curator  # noqa: E402
+
+
+def main() -> int:
+    return skill_curator.main(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
