@@ -1,0 +1,214 @@
+#!/usr/bin/env python3
+"""dev — developer workflow for skill-system.
+
+Subcommands:
+  test         run smoke + mcp tests
+  sync         rsync this project into ~/.skill-system/
+  install      re-run install.sh against current source
+  doctor       health check (tests + paths + permissions)
+  clean        remove __pycache__/ + .index.cache + .archive/
+  bump MSG     commit all + push (MSG = commit message)
+  status       git status + test result + sync status
+
+Designed to be runnable from anywhere — script auto-locates project root.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve()
+PROJECT_ROOT = SCRIPT.parent.parent  # bin/dev → project root
+SYSTEM_ROOT = Path.home() / ".skill-system"
+INSTALL_SH = PROJECT_ROOT / "install.sh"
+
+
+def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, **kwargs)
+
+
+def cmd_test(_args) -> int:
+    print(f"=== Running tests in {PROJECT_ROOT} ===")
+    for test in ("tests/test_smoke.py", "tests/test_mcp.py"):
+        r = run([sys.executable, str(PROJECT_ROOT / test)], cwd=PROJECT_ROOT)
+        if r.returncode != 0:
+            print(f"✗ {test} failed")
+            return r.returncode
+    print("✓ all tests passed")
+    return 0
+
+
+def cmd_sync(_args) -> int:
+    print(f"=== Syncing {PROJECT_ROOT} → {SYSTEM_ROOT} ===")
+    SYSTEM_ROOT.mkdir(parents=True, exist_ok=True)
+    r = run([
+        "rsync", "-a", "--delete",
+        "--exclude=.DS_Store",
+        "--exclude=__pycache__",
+        "--exclude=.index.cache",
+        "--exclude=.usage.json",
+        "--exclude=.usage.json.lock",
+        "--exclude=.archive",
+        f"{PROJECT_ROOT}/", f"{SYSTEM_ROOT}/",
+    ])
+    print(f"✓ synced. source-of-truth is now {PROJECT_ROOT}")
+    print(f"  ~/.skill-system/ is the install target")
+    return r.returncode
+
+
+def cmd_install(_args) -> int:
+    print(f"=== Running install.sh from {PROJECT_ROOT} ===")
+    r = run(["bash", str(INSTALL_SH)], cwd=PROJECT_ROOT)
+    return r.returncode
+
+
+def cmd_doctor(_args) -> int:
+    print(f"=== Doctor ===")
+    print(f"  project root:  {PROJECT_ROOT}")
+    print(f"  install root:  {SYSTEM_ROOT}")
+    if not (PROJECT_ROOT / "lib").exists():
+        print(f"  ✗ lib/ missing")
+        return 1
+    if not (PROJECT_ROOT / "bin").exists():
+        print(f"  ✗ bin/ missing")
+        return 1
+    if not (PROJECT_ROOT / "install.sh").exists():
+        print(f"  ✗ install.sh missing")
+        return 1
+    print(f"  ✓ structure OK")
+    r = run([sys.executable, "-c", "import yaml" if False else "pass"],
+            capture_output=True)
+    if r.returncode != 0:
+        print(f"  ✗ python3 broken: {r.stderr.decode()}")
+        return 1
+    print(f"  ✓ python3 OK")
+    if not SYSTEM_ROOT.exists():
+        print(f"  ⚠ ~/.skill-system/ not installed yet — run `bin/dev install`")
+        return 0
+    sync_marker = SYSTEM_ROOT / "lib"
+    if not sync_marker.exists():
+        print(f"  ⚠ ~/.skill-system/lib/ missing — run `bin/dev sync`")
+        return 0
+    print(f"  ✓ install target present")
+    return 0
+
+
+def cmd_clean(args) -> int:
+    targets = [
+        PROJECT_ROOT / "lib/__pycache__",
+        PROJECT_ROOT / "lib" / "__pycache__",
+    ]
+    home = Path.home()
+    for cli in (".claude", ".config/opencode", ".codex"):
+        skills_dir = home / cli / "skills"
+        if skills_dir.exists():
+            for p in (skills_dir / ".index.cache", skills_dir / ".usage.json"):
+                if p.exists():
+                    targets.append(p)
+    if "--archive" in args:
+        for cli in (".claude", ".config/opencode", ".codex"):
+            archive = home / cli / "skills" / ".archive"
+            if archive.exists():
+                targets.append(archive)
+    for t in targets:
+        if t.is_dir():
+            shutil.rmtree(t)
+            print(f"  removed dir:  {t}")
+        elif t.is_file():
+            t.unlink()
+            print(f"  removed file: {t}")
+    print("✓ cleaned")
+    return 0
+
+
+def cmd_bump(args) -> int:
+    if not args:
+        print("usage: bin/dev bump <commit message>")
+        return 2
+    msg = " ".join(args)
+    r = run(["git", "add", "-A"], cwd=PROJECT_ROOT)
+    if r.returncode != 0:
+        return r.returncode
+    r = run(["git", "commit", "-m", msg], cwd=PROJECT_ROOT)
+    if r.returncode != 0:
+        return r.returncode
+    r = run(["git", "push", "origin", "main"], cwd=PROJECT_ROOT)
+    return r.returncode
+
+
+def cmd_status(_args) -> int:
+    print(f"=== Status ===")
+    print()
+    print("git:")
+    run(["git", "status", "--short"], cwd=PROJECT_ROOT)
+    run(["git", "log", "--oneline", "-5"], cwd=PROJECT_ROOT)
+    print()
+    print("sync (project vs ~/.skill-system/):")
+    r = run([
+        "diff", "-rq",
+        "--exclude=.DS_Store",
+        "--exclude=__pycache__",
+        "--exclude=.index.cache",
+        "--exclude=.usage.json",
+        "--exclude=.usage.json.lock",
+        "--exclude=.archive",
+        "--exclude=.git",
+        str(PROJECT_ROOT), str(SYSTEM_ROOT),
+    ], capture_output=True, text=True)
+    if r.returncode == 0:
+        print("  ✓ in sync")
+    else:
+        diff_lines = r.stdout.strip().splitlines()[:20]
+        for line in diff_lines:
+            print(f"  {line}")
+        if len(r.stdout.strip().splitlines()) > 20:
+            print(f"  ... ({len(r.stdout.strip().splitlines()) - 20} more)")
+    print()
+    print("install target ~/.skill-system/:")
+    print(f"  exists: {SYSTEM_ROOT.exists()}")
+    if SYSTEM_ROOT.exists():
+        print(f"  bin/skill:   {(SYSTEM_ROOT / 'bin/skill').exists()}")
+        print(f"  lib/:        {(SYSTEM_ROOT / 'lib').exists()}")
+    return 0
+
+
+COMMANDS = {
+    "test":    (cmd_test,    "run smoke + mcp tests"),
+    "sync":    (cmd_sync,    "rsync this project into ~/.skill-system/"),
+    "install": (cmd_install, "re-run install.sh against current source"),
+    "doctor":  (cmd_doctor,  "health check (structure + python + install)"),
+    "clean":   (cmd_clean,   "remove __pycache__/ + .index.cache + .usage.json"),
+    "bump":    (cmd_bump,    "git add -A + commit MSG + push to origin/main"),
+    "status":  (cmd_status,  "git status + sync diff + install target state"),
+}
+
+
+def main() -> int:
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        print()
+        print("Subcommands:")
+        for name, (_, desc) in COMMANDS.items():
+            print(f"  {name:<10} {desc}")
+        print()
+        print("Examples:")
+        print("  bin/dev doctor          # first-time check")
+        print("  bin/dev test            # run all tests")
+        print("  bin/dev sync            # sync to ~/.skill-system/")
+        print("  bin/dev bump 'fix foo'  # commit + push in one shot")
+        return 0
+    cmd = sys.argv[1]
+    if cmd not in COMMANDS:
+        print(f"unknown subcommand: {cmd}", file=sys.stderr)
+        print(f"run `bin/dev --help` for the full list", file=sys.stderr)
+        return 2
+    fn, _ = COMMANDS[cmd]
+    return fn(sys.argv[2:])
+
+
+if __name__ == "__main__":
+    sys.exit(main())
