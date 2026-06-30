@@ -2,6 +2,39 @@
 
 All notable changes to hermes-skill-system.
 
+## [1.2.0] - 2026-06-30
+
+### Changed
+
+- **System prompt精简 (180 → 52 lines, -71%)**:
+  - Based on Hermes Agent source (`agent/system_prompt.py` SKILLS_GUIDANCE):
+    only 4 lines of skill guidance in the baseline prompt
+  - HARD constraints moved out of system prompt (already in tool description)
+  - 8-section body requirements moved to `/learn` (loaded on demand)
+  - Tool framing table moved to `/learn`
+  - Each CLI's marked block now ~16-18 lines instead of 47-59
+- **`update_marked_block()` helper** in `install.sh`:
+  - Replaces existing marked blocks instead of skipping on rerun
+  - Idempotent: strips old block, appends new block, preserves user content
+  - Fixed bug where reinstall did not update previously-installed blocks
+- **Fixed duplicate `install_cli` function**:
+  - Broken leftover from prior inserts had `install_cli` containing uninstall
+    logic
+  - Renamed to `uninstall_cli` to match its actual behavior
+
+### Why this matters
+
+Before: every Claude Code / OpenCode / Codex session paid ~180 lines of
+permanent context overhead describing the skill system in detail.
+
+After: each session pays ~52 lines total. HARD constraints live in the
+tool description (which the agent sees only when calling the tool),
+detailed authoring standards live in `/learn` (loaded only when the user
+invokes /learn), and the skill index is dynamically generated per-session.
+
+The agent still gets clear guidance ("save after complex tasks, patch
+when stale") in 4-5 lines, not 50.
+
 ## [1.1.0] - 2026-06-30
 
 ### Added
@@ -23,7 +56,7 @@ All notable changes to hermes-skill-system.
   - `unregister_mcp_servers()` runs on `--uninstall`
 - **System prompt updates** (`commands/{claude-code,opencode,codex}/*`):
   - Agent now told `skill_manage` is a native MCP tool — call it directly,
-    don't invoke via Bash/terminal
+    don't invoke via Bash
 
 ### Changed
 
@@ -35,7 +68,7 @@ All notable changes to hermes-skill-system.
 
 ### Why this matters
 
-Before v1.1.0, `skill_manage` was a shell script the agent ran via the Bash
+Before v1.1.0, `skill_manage` was a shell script the agent had to invoke via the Bash
 tool — fragile (string args, no type safety, error handling was string
 parsing). After v1.1.0, it's a proper tool: structured JSON Schema,
 typed arguments, `isError` flag in the response, agent sees it in the

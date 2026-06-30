@@ -58,6 +58,31 @@ run_or_all() {
   return 1
 }
 
+update_marked_block() {
+  # Replace the marked <!-- skill-system:start --> ... <!-- skill-system:end -->
+  # block in $1 with contents of $2. Idempotent: strips old first.
+  python3 - "$1" "$2" <<'PYEOF'
+import re, sys
+from pathlib import Path
+target = Path(sys.argv[1])
+source = Path(sys.argv[2])
+marker_open = "<!-- skill-system:start -->"
+marker_close = "<!-- skill-system:end -->"
+pattern = re.compile(
+    re.escape(marker_open) + r".*?" + re.escape(marker_close) + r"\n?",
+    re.DOTALL,
+)
+new_body = source.read_text(encoding="utf-8")
+existing = target.read_text(encoding="utf-8") if target.exists() else ""
+stripped = pattern.sub("", existing).rstrip() + "\n"
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(
+    stripped + "\n" + marker_open + "\n" + new_body.rstrip("\n") + "\n" + marker_close + "\n"
+)
+print(f"  updated marked block in {target}")
+PYEOF
+}
+
 uninstall_cli() {
   local cli="$1"
   case "${cli}" in
@@ -134,21 +159,10 @@ install_cli() {
             "${HOME}/.claude/commands/skill-manage.md"
       echo "  installed: ~/.claude/commands/{learn,skill-manage}.md"
 
-      # CLAUDE.md: append our block if not already present
+      # CLAUDE.md: replace existing marked block (idempotent)
       local claude_md="${HOME}/.claude/CLAUDE.md"
       mkdir -p "$(dirname "${claude_md}")"
-      local marker="<!-- skill-system:start -->"
-      if [[ -f "${claude_md}" ]] && grep -q "${marker}" "${claude_md}"; then
-        echo "  CLAUDE.md already has skill-system block; skipping"
-      else
-        {
-          echo ""
-          echo "${marker}"
-          cat "${SYSTEM_ROOT}/commands/claude-code/CLAUDE.md"
-          echo "<!-- skill-system:end -->"
-        } >> "${claude_md}"
-        echo "  appended skill-system block to ~/.claude/CLAUDE.md"
-      fi
+      update_marked_block "${claude_md}" "${SYSTEM_ROOT}/commands/claude-code/CLAUDE.md"
 
       if [[ "${NO_HOOKS}" -eq 0 ]]; then
         register_claude_hooks
@@ -164,23 +178,9 @@ install_cli() {
 
       local instr="${HOME}/.config/opencode/instructions.md"
       mkdir -p "$(dirname "${instr}")"
-      local marker="<!-- skill-system:start -->"
-      if [[ -f "${instr}" ]] && grep -q "${marker}" "${instr}"; then
-        echo "  instructions.md already has skill-system block; skipping"
-      else
-        {
-          echo "${marker}"
-          cat "${SYSTEM_ROOT}/commands/opencode/instructions.md"
-          echo "<!-- skill-system:end -->"
-        } > "${instr}.new"
-        if [[ -f "${instr}" ]]; then
-          cat "${instr}" >> "${instr}.new"
-        fi
-        mv "${instr}.new" "${instr}"
-        echo "  wrote ~/.config/opencode/instructions.md"
-      fi
+      update_marked_block "${instr}" "${SYSTEM_ROOT}/commands/opencode/instructions.md"
       bash "${SYSTEM_ROOT}/hooks/refresh_index.sh" opencode
-      echo "  generated initial skill index cache"
+      echo "  refreshed skill index cache"
       ;;
     codex)
       mkdir -p "${HOME}/.codex/prompts"
@@ -192,23 +192,9 @@ install_cli() {
 
       local agents="${HOME}/.codex/AGENTS.md"
       mkdir -p "$(dirname "${agents}")"
-      local marker="<!-- skill-system:start -->"
-      if [[ -f "${agents}" ]] && grep -q "${marker}" "${agents}"; then
-        echo "  AGENTS.md already has skill-system block; skipping"
-      else
-        {
-          echo "${marker}"
-          cat "${SYSTEM_ROOT}/commands/codex/AGENTS.md"
-          echo "<!-- skill-system:end -->"
-        } > "${agents}.new"
-        if [[ -f "${agents}" ]]; then
-          cat "${agents}" >> "${agents}.new"
-        fi
-        mv "${agents}.new" "${agents}"
-        echo "  wrote ~/.codex/AGENTS.md"
-      fi
+      update_marked_block "${agents}" "${SYSTEM_ROOT}/commands/codex/AGENTS.md"
       bash "${SYSTEM_ROOT}/hooks/refresh_index.sh" codex
-      echo "  generated initial skill index cache"
+      echo "  refreshed skill index cache"
       ;;
   esac
 }
