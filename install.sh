@@ -172,37 +172,40 @@ if marker in txt:
     codefuse)
       rm -f "${HOME}/.codefuse/fuse/commands/learn.md" \
             "${HOME}/.codefuse/fuse/commands/skill-manage.md"
-      # Remove hooks + MCP server from codefuse.json
+      # Remove hooks + MCP server from codefuse.json AND engine/cc/settings.json
       python3 -c "
 import json, sys
-p = '${HOME}/.codefuse/fuse/codefuse.json'
-try:
-    s = json.load(open(p))
-except Exception:
-    sys.exit(0)
-# Remove skill-system hooks from each event
-hooks = s.get('hooks', {})
-for event in list(hooks.keys()):
-    entries = hooks[event]
-    filtered = []
-    for e in entries:
-        cmds = e.get('hooks', [])
-        if not any('skill-system' in (c.get('command', '') if isinstance(c, dict) else '')
-                   for c in cmds):
-            filtered.append(e)
-    if filtered:
-        hooks[event] = filtered
-    else:
-        del hooks[event]
-if not hooks:
-    s.pop('hooks', None)
-# Remove MCP server
-mcp = s.get('mcpServers', {})
-mcp.pop('skill-system', None)
-if not mcp:
-    s.pop('mcpServers', None)
-json.dump(s, open(p, 'w'), indent=2, ensure_ascii=False)
-print('  removed skill-system hooks + MCP from codefuse.json')
+
+def clean_hooks(path):
+    try:
+        s = json.load(open(path))
+    except Exception:
+        return
+    hooks = s.get('hooks', {})
+    for event in list(hooks.keys()):
+        entries = hooks[event]
+        filtered = []
+        for e in entries:
+            cmds = e.get('hooks', [])
+            if not any('skill-system' in (c.get('command', '') if isinstance(c, dict) else '')
+                       for c in cmds):
+                filtered.append(e)
+        if filtered:
+            hooks[event] = filtered
+        else:
+            del hooks[event]
+    if not hooks:
+        s.pop('hooks', None)
+    # Remove MCP server (codefuse.json only)
+    mcp = s.get('mcpServers', {})
+    mcp.pop('skill-system', None)
+    if not mcp:
+        s.pop('mcpServers', None)
+    json.dump(s, open(path, 'w'), indent=2, ensure_ascii=False)
+    print(f'  cleaned {path}')
+
+clean_hooks('${HOME}/.codefuse/fuse/codefuse.json')
+clean_hooks('${HOME}/.codefuse/engine/cc/settings.json')
 " 2>/dev/null || true
       # Trim CODEFUSE.md
       python3 -c "
@@ -345,19 +348,18 @@ PYEOF
 }
 
 register_codefuse_hooks() {
-  # CodeFuse stores hooks in ~/.codefuse/fuse/codefuse.json (same format as
-  # Claude Code settings.json hooks). We merge skill-system hooks into the
-  # existing hooks object without clobbering other hooks.
+  # CodeFuse has two hook locations depending on engine:
+  #   1. ~/.codefuse/fuse/codefuse.json — cfuse engine hooks
+  #   2. ~/.codefuse/engine/cc/settings.json — claude-code engine hooks
+  # We register in both so it works regardless of which engine is active.
   local cfuse_json="${HOME}/.codefuse/fuse/codefuse.json"
-  mkdir -p "$(dirname "${cfuse_json}")"
-  python3 - <<PYEOF
-import json, os
-p = "${cfuse_json}"
-try:
-    s = json.load(open(p)) if os.path.exists(p) else {}
-except Exception:
-    s = {}
-hooks = s.setdefault("hooks", {})
+  local cc_settings="${HOME}/.codefuse/engine/cc/settings.json"
+  mkdir -p "$(dirname "${cfuse_json}")" "$(dirname "${cc_settings}")"
+  python3 - "${cfuse_json}" "${cc_settings}" <<'PYEOF'
+import json, os, sys
+
+cfuse_path = sys.argv[1]
+cc_path = sys.argv[2]
 
 def make_hook(cmd, timeout=5):
     return {"type": "command", "command": cmd, "timeout": timeout}
@@ -372,26 +374,36 @@ def already(entries, marker=skill_marker):
                 return True
     return False
 
-# UserPromptSubmit: inject skill index
-ups = hooks.setdefault("UserPromptSubmit", [])
-if not already(ups):
-    ups.append({"hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_userpromptsubmit.sh", timeout=3)]})
+UPS_CMD = "bash ${HOME}/.skill-system/hooks/claude_code_userpromptsubmit.sh"
+PTU_CMD = "bash ${HOME}/.skill-system/hooks/claude_code_posttooluse.sh"
+STOP_CMD = "bash ${HOME}/.skill-system/hooks/claude_code_stop.sh"
 
-# PostToolUse: refresh index after skill_manage
-ptu = hooks.setdefault("PostToolUse", [])
-if not already(ptu):
-    ptu.append({
-        "matcher": "Bash|Read|Write|Edit",
-        "hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_posttooluse.sh", timeout=5)]
-    })
+def register_into(path):
+    try:
+        s = json.load(open(path)) if os.path.exists(path) else {}
+    except Exception:
+        s = {}
+    if not isinstance(s, dict):
+        s = {}
+    hooks = s.setdefault("hooks", {})
+    ups = hooks.setdefault("UserPromptSubmit", [])
+    if not already(ups):
+        ups.append({"hooks": [make_hook(UPS_CMD, timeout=3)]})
+    ptu = hooks.setdefault("PostToolUse", [])
+    if not already(ptu):
+        ptu.append({
+            "matcher": "Bash|Read|Write|Edit",
+            "hooks": [make_hook(PTU_CMD, timeout=5)]
+        })
+    stop = hooks.setdefault("Stop", [])
+    if not already(stop):
+        stop.append({"hooks": [make_hook(STOP_CMD, timeout=10)]})
+    json.dump(s, open(path, "w"), indent=2, ensure_ascii=False)
 
-# Stop: collect profile + emit offer + trigger curator
-stop = hooks.setdefault("Stop", [])
-if not already(stop):
-    stop.append({"hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_stop.sh", timeout=10)]})
-
-json.dump(s, open(p, "w"), indent=2, ensure_ascii=False)
-print("  registered hooks in ~/.codefuse/fuse/codefuse.json")
+register_into(cfuse_path)
+print(f"  registered hooks in {cfuse_path}")
+register_into(cc_path)
+print(f"  registered hooks in {cc_path}")
 PYEOF
 }
 
