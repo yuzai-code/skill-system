@@ -4,7 +4,13 @@
 set -euo pipefail
 
 SYSTEM_ROOT="${HOME}/.skill-system"
-SKILLS_DIR="${HOME}/.claude/skills"
+
+# Detect CLI: CodeFuse vs Claude Code
+if [[ -n "${CODEFUSE_FUSE_DIR:-}" ]] || [[ -n "${CODEFUSE_SESSION:-}" ]]; then
+  SKILLS_DIR="${HOME}/.codefuse/fuse/skills"
+else
+  SKILLS_DIR="${HOME}/.claude/skills"
+fi
 
 if [[ ! -d "${SKILLS_DIR}" ]]; then
   exit 0

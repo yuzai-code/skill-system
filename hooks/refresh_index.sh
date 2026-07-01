@@ -11,6 +11,7 @@ case "${CLI}" in
   claude-code) SKILLS_DIR="${HOME_DIR}/.claude/skills" ;;
   opencode)    SKILLS_DIR="${HOME_DIR}/.config/opencode/skills" ;;
   codex)       SKILLS_DIR="${HOME_DIR}/.codex/skills" ;;
+  codefuse)    SKILLS_DIR="${HOME_DIR}/.codefuse/fuse/skills" ;;
   *) echo "unknown CLI: ${CLI}" >&2; exit 1 ;;
 esac
 

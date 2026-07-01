@@ -1,6 +1,6 @@
-# hermes-skill-system
+# skill-system
 
-Hermes-style procedural memory for **Claude Code / OpenCode / Codex**.
+Procedural memory for **Claude Code / OpenCode / Codex / CodeFuse**.
 
 Captures successful workflows as reusable skills, with a curator that
 archives unused ones and consolidates overlapping clusters. Per-CLI skill
@@ -28,7 +28,7 @@ storage, shared system code.
 │   ├── schema.py         # SKILL.md validation (HARD 60-char description)
 │   ├── atomic_io.py      # crash-safe writes
 │   ├── fuzzy_match.py    # whitespace-tolerant find-and-replace
-│   ├── skill_preprocess.py  # ${HERMES_SKILL_DIR} + !`cmd` (opt-in)
+│   ├── skill_preprocess.py  # ${SKILL_DIR} + !`cmd` (opt-in)
 │   ├── skill_usage.py    # .usage.json sidecar with fcntl lock
 │   ├── skill_manage.py   # 6 actions, 6-layer validation
 │   ├── skill_index.py    # prompt-injectable index
@@ -42,7 +42,8 @@ storage, shared system code.
 ├── commands/                              # per-CLI config templates
 │   ├── claude-code/CLAUDE.md + commands/{learn,skill-manage}.md
 │   ├── opencode/instructions.md + commands/{learn,skill-manage}.md
-│   └── codex/AGENTS.md + prompts/{learn,skill-manage}.md
+│   ├── codex/AGENTS.md + prompts/{learn,skill-manage}.md
+│   └── codefuse/CODEFUSE.md + commands/{learn,skill-manage}.md
 ├── hooks/                                # hook scripts
 ├── tests/
 │   ├── test_smoke.py     # 31 assertions, core library end-to-end
@@ -52,10 +53,12 @@ storage, shared system code.
 ~/.claude/skills/                         # per-CLI storage (each keeps its own)
 ~/.config/opencode/skills/                # symlink-friendly
 ~/.codex/skills/                          # ...
+~/.codefuse/fuse/skills/                  # ...
 
 ~/.claude/.mcp.json                       # registers skill-system MCP server
 ~/.config/opencode/.mcp.json
 ~/.codex/.mcp.json
+~/.codefuse/fuse/codefuse.json            # CodeFuse: hooks + mcpServers in one file
 ```
 
 ## Install
@@ -80,10 +83,9 @@ by installer).
 name: arxiv-search              # kebab-case, ≤64 chars
 description: Search arXiv by keyword, author, or ID.    # HARD: ≤60 chars
 version: 0.1.0
-author: hermes-skill-system     # literal, NEVER environment identity
+author: skill-system     # literal, NEVER environment identity
 platforms: [macos, linux]       # optional, OS-bound only
 metadata:
-  hermes:
     tags: [Research, Academic]
 ---
 
@@ -104,7 +106,7 @@ metadata:
 truncates at 60, anything past is silently cut and never routes. After
 writing, `len(description) <= 60` is enforced at create time.
 
-**author = `hermes-skill-system` literally** — never OS username or git
+**author = `skill-system` literally** — never OS username or git
 config. Skills get shared; environment identity is a privacy leak.
 
 **Tool framing** — say `read_file` not cat, `search_files` not grep,
@@ -140,6 +142,7 @@ skill-curator --resume
 | Claude Code | `~/.claude/skills/` | `~/.claude/CLAUDE.md` | `~/.claude/commands/{learn,skill-manage}.md` | `~/.claude/settings.json` (UserPromptSubmit / PostToolUse / Stop) |
 | OpenCode | `~/.config/opencode/skills/` | `~/.config/opencode/instructions.md` | `~/.config/opencode/commands/{learn,skill-manage}.md` | Manual refresh via `skill index`; launchd plist optional |
 | Codex | `~/.codex/skills/` | `~/.codex/AGENTS.md` | `~/.codex/prompts/{learn,skill-manage}.md` | Manual refresh via `skill index` |
+| CodeFuse | `~/.codefuse/fuse/skills/` | `~/.codefuse/fuse/CODEFUSE.md` | `~/.codefuse/fuse/commands/{learn,skill-manage}.md` | `~/.codefuse/fuse/codefuse.json` (UserPromptSubmit / PostToolUse / Stop) |
 
 Each CLI's existing user content in those files is preserved — the
 installer appends a marked block (`<!-- skill-system:start --> ... <!-- skill-system:end -->`)
@@ -150,11 +153,11 @@ or only overwrites its own files.
 In any SKILL.md body:
 
 ```markdown
-Run: ${HERMES_SKILL_DIR}/scripts/setup.sh
+Run: ${SKILL_DIR}/scripts/setup.sh
 Today's date: !`date +%Y-%m-%d`
 ```
 
-- `${HERMES_SKILL_DIR}` / `${HERMES_SESSION_ID}`: replaced at load
+- `${SKILL_DIR}` / `${SKILL_SESSION_ID}`: replaced at load
   (`SKILL_TEMPLATE_VARS=1`, default ON)
 - `!`cmd``: runs at load, replaces stdout
   (`SKILL_INLINE_SHELL=1`, **default OFF for security**)
@@ -176,7 +179,7 @@ Inactivity-triggered, not cron:
 LLM consolidation pass is **off by default** (cost). Enable with
 `SKILL_CONSOLIDATE=1` or run `skill-curator --consolidate` (the umbrella
 prompt is implemented as a stub; would invoke the main LLM with the
-Hermes-style umbrella-building spec).
+umbrella-building spec).
 
 ## Tests
 
@@ -194,7 +197,7 @@ shell), CLI end-to-end (subprocess).
 
 Skills get shared and published. Two HARD rules prevent leaks:
 
-1. `author` must equal `hermes-skill-system` literally. We refuse to
+1. `author` must equal `skill-system` literally. We refuse to
    accept `os.getlogin()`, `git config user.name`, or any environment-
    derived identity at create/edit time.
 2. Description is truncated to 60 chars in the prompt index, so a

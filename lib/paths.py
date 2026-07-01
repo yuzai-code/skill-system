@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-CLI = Literal["claude-code", "opencode", "codex"]
+CLI = Literal["claude-code", "opencode", "codex", "codefuse"]
 
 
 def _home() -> Path:
@@ -27,6 +27,8 @@ def skills_dir_for(cli: CLI) -> Path:
         return _home() / ".config" / "opencode" / "skills"
     if cli == "codex":
         return _home() / ".codex" / "skills"
+    if cli == "codefuse":
+        return _home() / ".codefuse" / "fuse" / "skills"
     raise ValueError(f"Unknown CLI: {cli}")
 
 
@@ -38,6 +40,8 @@ def config_dir_for(cli: CLI) -> Path:
         return _home() / ".config" / "opencode"
     if cli == "codex":
         return _home() / ".codex"
+    if cli == "codefuse":
+        return _home() / ".codefuse" / "fuse"
     raise ValueError(f"Unknown CLI: {cli}")
 
 
@@ -50,12 +54,15 @@ def detect_active_cli() -> CLI:
       3. Default to 'opencode' (works in any context)
     """
     explicit = os.environ.get("SKILL_SYSTEM_CLI")
-    if explicit in ("claude-code", "opencode", "codex"):
+    if explicit in ("claude-code", "opencode", "codex", "codefuse"):
         return explicit  # type: ignore[return-value]
     if os.environ.get("CLAUDE_CODE_ENTRYPOINT") or os.environ.get("CLAUDE_PROJECT_DIR"):
         return "claude-code"
     if os.environ.get("CODEX_HOME") or os.environ.get("CODEX_RUNTIME"):
         return "codex"
+    # CodeFuse: detect via env or config presence
+    if os.environ.get("CODEFUSE_FUSE_DIR") or os.environ.get("CODEFUSE_SESSION"):
+        return "codefuse"
     return "opencode"
 
 

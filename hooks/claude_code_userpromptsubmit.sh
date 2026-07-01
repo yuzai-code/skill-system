@@ -3,7 +3,12 @@
 # Reads the cached index and prints it as additional context.
 set -euo pipefail
 
-SKILLS_DIR="${HOME}/.claude/skills"
+# Detect CLI: CodeFuse vs Claude Code
+if [[ -n "${CODEFUSE_FUSE_DIR:-}" ]] || [[ -n "${CODEFUSE_SESSION:-}" ]]; then
+  SKILLS_DIR="${HOME}/.codefuse/fuse/skills"
+else
+  SKILLS_DIR="${HOME}/.claude/skills"
+fi
 CACHE="${SKILLS_DIR}/.index.cache"
 
 if [[ ! -f "${CACHE}" ]]; then

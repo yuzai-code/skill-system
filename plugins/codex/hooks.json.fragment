@@ -1,0 +1,24 @@
+{
+  "_skill_system_comment": "skill-system auto-capture hooks. Merge into ~/.codex/hooks.json under the 'hooks' array. Requires [features].codex_hooks = true in config.toml.",
+  "hooks": [
+    {
+      "event": "on_tool_call",
+      "match": "*",
+      "action": "custom",
+      "command": "python3 \"${HOME}/.skill-system/bin/skill-codex-log\" --tool \"$TOOL_NAME\" --no-error",
+      "timeout": 3
+    },
+    {
+      "event": "on_error",
+      "action": "custom",
+      "command": "python3 \"${HOME}/.skill-system/bin/skill-codex-log\" --tool \"$TOOL_NAME\" --error",
+      "timeout": 3
+    },
+    {
+      "event": "on_task_complete",
+      "action": "custom",
+      "command": "python3 \"${HOME}/.skill-system/bin/skill-profile\" --from-log \"${HOME}/.skill-system/state/codex_tool.log\" --agent-tool codex",
+      "timeout": 10
+    }
+  ]
+}

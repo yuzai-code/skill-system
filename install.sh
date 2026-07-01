@@ -17,6 +17,13 @@
 #   4. Runs `skill doctor` to verify installation
 #   5. Adds ~/.skill-system/bin to PATH (print instructions; doesn't auto-edit shell rc)
 #
+# CodeFuse support:
+#   - Skills: ~/.codefuse/fuse/skills/
+#   - Hooks:  ~/.codefuse/fuse/codefuse.json (hooks field, same format as Claude Code)
+#   - MCP:    ~/.codefuse/fuse/codefuse.json (mcpServers field)
+#   - System prompt: ~/.codefuse/fuse/CODEFUSE.md
+#   - Commands: ~/.codefuse/fuse/commands/
+#
 # On uninstall:
 #   - Removes the installed config files (only the ones we created — user files
 #     appended after our marker are preserved)
@@ -42,11 +49,12 @@ fi
 UNINSTALL=0
 ONLY_CLI=""
 NO_HOOKS=0
-for arg in "$@"; do
-  case "${arg}" in
-    --uninstall) UNINSTALL=1 ;;
-    --cli) shift; ONLY_CLI="${1:-}" ;;
-    --no-hooks) NO_HOOKS=1 ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --uninstall) UNINSTALL=1; shift ;;
+    --cli) ONLY_CLI="${2:-}"; shift 2 ;;
+    --no-hooks) NO_HOOKS=1; shift ;;
+    *) shift ;;
   esac
 done
 
@@ -110,7 +118,8 @@ json.dump(s, open(p, 'w'), indent=2)
       ;;
     opencode)
       rm -f "${HOME}/.config/opencode/commands/learn.md" \
-            "${HOME}/.config/opencode/commands/skill-manage.md"
+            "${HOME}/.config/opencode/commands/skill-manage.md" \
+            "${HOME}/.config/opencode/plugins/skill-capture.js"
       # instructions.md is user-edited; we don't remove it wholesale
       python3 -c "
 import re
@@ -130,6 +139,21 @@ if marker in txt:
     codex)
       rm -f "${HOME}/.codex/prompts/learn.md" \
             "${HOME}/.codex/prompts/skill-manage.md"
+      # strip our hooks from ~/.codex/hooks.json
+      python3 -c "
+import json
+p = '${HOME}/.codex/hooks.json'
+try:
+    s = json.load(open(p))
+except Exception:
+    raise SystemExit(0)
+hooks = s.get('hooks', [])
+s['hooks'] = [h for h in hooks if 'skill' not in str(h.get('command', ''))]
+if not s['hooks']:
+    s.pop('hooks', None)
+json.dump(s, open(p, 'w'), indent=2)
+print('  stripped skill-system hooks from ~/.codex/hooks.json')
+" 2>/dev/null || true
       python3 -c "
 import re
 p = '${HOME}/.codex/AGENTS.md'
@@ -144,6 +168,57 @@ if marker in txt:
     print('  trimmed Codex AGENTS.md (skill-system block removed)')
 "
       echo "  removed Codex prompts"
+      ;;
+    codefuse)
+      rm -f "${HOME}/.codefuse/fuse/commands/learn.md" \
+            "${HOME}/.codefuse/fuse/commands/skill-manage.md"
+      # Remove hooks + MCP server from codefuse.json
+      python3 -c "
+import json, sys
+p = '${HOME}/.codefuse/fuse/codefuse.json'
+try:
+    s = json.load(open(p))
+except Exception:
+    sys.exit(0)
+# Remove skill-system hooks from each event
+hooks = s.get('hooks', {})
+for event in list(hooks.keys()):
+    entries = hooks[event]
+    filtered = []
+    for e in entries:
+        cmds = e.get('hooks', [])
+        if not any('skill-system' in (c.get('command', '') if isinstance(c, dict) else '')
+                   for c in cmds):
+            filtered.append(e)
+    if filtered:
+        hooks[event] = filtered
+    else:
+        del hooks[event]
+if not hooks:
+    s.pop('hooks', None)
+# Remove MCP server
+mcp = s.get('mcpServers', {})
+mcp.pop('skill-system', None)
+if not mcp:
+    s.pop('mcpServers', None)
+json.dump(s, open(p, 'w'), indent=2, ensure_ascii=False)
+print('  removed skill-system hooks + MCP from codefuse.json')
+" 2>/dev/null || true
+      # Trim CODEFUSE.md
+      python3 -c "
+import re
+p = '${HOME}/.codefuse/fuse/CODEFUSE.md'
+try:
+    txt = open(p).read()
+except Exception:
+    raise SystemExit(0)
+marker = '<!-- skill-system:start -->'
+if marker in txt:
+    txt = re.sub(re.escape(marker) + r'.*?<!-- skill-system:end -->\n*', '', txt, flags=re.S)
+    open(p, 'w').write(txt)
+    print('  trimmed CODEFUSE.md (skill-system block removed)')
+"
+      echo "  removed CodeFuse commands + hooks"
       ;;
   esac
 }
@@ -176,6 +251,16 @@ install_cli() {
             "${HOME}/.config/opencode/commands/skill-manage.md"
       echo "  installed: ~/.config/opencode/commands/{learn,skill-manage}.md"
 
+      # Auto-capture plugin: subscribes to tool.execute.after + session.idle,
+      # emits skill-capture offers via skill-profile CLI + tui.prompt.append.
+      if [[ "${NO_HOOKS}" -eq 0 ]]; then
+        local plug_dir="${HOME}/.config/opencode/plugins"
+        mkdir -p "${plug_dir}"
+        cp -f "${SYSTEM_ROOT}/plugins/opencode/skill-capture.js" \
+              "${plug_dir}/skill-capture.js"
+        echo "  installed: ~/.config/opencode/plugins/skill-capture.js (auto-capture ON)"
+      fi
+
       local instr="${HOME}/.config/opencode/instructions.md"
       mkdir -p "$(dirname "${instr}")"
       update_marked_block "${instr}" "${SYSTEM_ROOT}/commands/opencode/instructions.md"
@@ -190,13 +275,124 @@ install_cli() {
             "${HOME}/.codex/prompts/skill-manage.md"
       echo "  installed: ~/.codex/prompts/{learn,skill-manage}.md"
 
+      # Auto-capture: merge hooks.json fragment into ~/.codex/hooks.json.
+      # Requires [features].codex_hooks = true in config.toml.
+      if [[ "${NO_HOOKS}" -eq 0 ]]; then
+        register_codex_hooks
+      fi
+
       local agents="${HOME}/.codex/AGENTS.md"
       mkdir -p "$(dirname "${agents}")"
       update_marked_block "${agents}" "${SYSTEM_ROOT}/commands/codex/AGENTS.md"
       bash "${SYSTEM_ROOT}/hooks/refresh_index.sh" codex
       echo "  refreshed skill index cache"
       ;;
+    codefuse)
+      # CodeFuse supports two engines: cfuse (native) and claude-code.
+      # Both share the same config: ~/.codefuse/fuse/codefuse.json
+      # Hooks format is identical to Claude Code settings.json.
+      # Commands go to ~/.codefuse/fuse/commands/
+      # System prompt goes to ~/.codefuse/fuse/CODEFUSE.md
+      mkdir -p "${HOME}/.codefuse/fuse/commands"
+      cp -f "${SYSTEM_ROOT}/commands/codefuse/learn.md" \
+            "${HOME}/.codefuse/fuse/commands/learn.md"
+      cp -f "${SYSTEM_ROOT}/commands/codefuse/skill-manage.md" \
+            "${HOME}/.codefuse/fuse/commands/skill-manage.md"
+      echo "  installed: ~/.codefuse/fuse/commands/{learn,skill-manage}.md"
+
+      # CODEFUSE.md: replace existing marked block (idempotent)
+      local cfuse_md="${HOME}/.codefuse/fuse/CODEFUSE.md"
+      mkdir -p "$(dirname "${cfuse_md}")"
+      update_marked_block "${cfuse_md}" "${SYSTEM_ROOT}/commands/codefuse/CODEFUSE.md"
+
+      if [[ "${NO_HOOKS}" -eq 0 ]]; then
+        register_codefuse_hooks
+      fi
+
+      bash "${SYSTEM_ROOT}/hooks/refresh_index.sh" codefuse
+      echo "  refreshed skill index cache"
+      ;;
   esac
+}
+
+register_codex_hooks() {
+  # Merge plugins/codex/hooks.json.fragment into ~/.codex/hooks.json.
+  # Idempotent: re-running strips our marker block first.
+  local target="${HOME}/.codex/hooks.json"
+  mkdir -p "$(dirname "${target}")"
+  python3 - "${target}" "${SYSTEM_ROOT}/plugins/codex/hooks.json.fragment" <<'PYEOF' 2>/dev/null || true
+import json, sys
+from pathlib import Path
+target = Path(sys.argv[1])
+fragment = Path(sys.argv[2])
+frag = json.loads(fragment.read_text(encoding="utf-8"))
+marker = "skill-system"
+try:
+    s = json.loads(target.read_text(encoding="utf-8")) if target.exists() else {}
+except Exception:
+    s = {}
+if not isinstance(s, dict):
+    s = {}
+hooks = s.setdefault("hooks", [])
+# strip our previously-added entries
+hooks = [h for h in hooks if marker not in str(h.get("command", ""))]
+s["hooks"] = hooks + frag.get("hooks", [])
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(json.dumps(s, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+print("  merged auto-capture hooks into ~/.codex/hooks.json")
+print("  (enable in config.toml: [features]\\ncodex_hooks = true")
+PYEOF
+}
+
+register_codefuse_hooks() {
+  # CodeFuse stores hooks in ~/.codefuse/fuse/codefuse.json (same format as
+  # Claude Code settings.json hooks). We merge skill-system hooks into the
+  # existing hooks object without clobbering other hooks.
+  local cfuse_json="${HOME}/.codefuse/fuse/codefuse.json"
+  mkdir -p "$(dirname "${cfuse_json}")"
+  python3 - <<PYEOF
+import json, os
+p = "${cfuse_json}"
+try:
+    s = json.load(open(p)) if os.path.exists(p) else {}
+except Exception:
+    s = {}
+hooks = s.setdefault("hooks", {})
+
+def make_hook(cmd, timeout=5):
+    return {"type": "command", "command": cmd, "timeout": timeout}
+
+skill_marker = "skill-system"
+
+def already(entries, marker=skill_marker):
+    for e in entries:
+        for h in e.get("hooks", []):
+            c = h.get("command", "")
+            if marker in c:
+                return True
+    return False
+
+# UserPromptSubmit: inject skill index
+ups = hooks.setdefault("UserPromptSubmit", [])
+if not already(ups):
+    ups.append({"hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_userpromptsubmit.sh", timeout=3)]})
+
+# PostToolUse: refresh index after skill_manage
+ptu = hooks.setdefault("PostToolUse", [])
+if not already(ptu):
+    ptu.append({
+        "matcher": "Bash|Read|Write|Edit",
+        "hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_posttooluse.sh", timeout=5)]
+    })
+
+# Stop: collect profile + emit offer + trigger curator
+stop = hooks.setdefault("Stop", [])
+if not already(stop):
+    stop.append({"hooks": [make_hook("bash \${HOME}/.skill-system/hooks/claude_code_stop.sh", timeout=10)]})
+
+json.dump(s, open(p, "w"), indent=2, ensure_ascii=False)
+print("  registered hooks in ~/.codefuse/fuse/codefuse.json")
+PYEOF
 }
 
 register_claude_hooks() {
@@ -256,6 +452,7 @@ register_mcp_servers() {
   export _SS_CC_DIR="${HOME}/.claude/skills"
   export _SS_OC_DIR="${HOME}/.config/opencode/skills"
   export _SS_CDX_DIR="${HOME}/.codex/skills"
+  export _SS_CFUSE_DIR="${HOME}/.codefuse/fuse/skills"
   python3 - <<'PYEOF'
 import json, os, re
 from pathlib import Path
@@ -356,8 +553,27 @@ if codex_legacy.exists():
     except Exception:
         pass
 
+# ---------- CodeFuse ----------
+# CodeFuse stores MCP servers in ~/.codefuse/fuse/codefuse.json under
+# "mcpServers" key, same format as Claude Code .mcp.json.
+CFUSE_DIR = os.environ.get("_SS_CFUSE_DIR", str(Path(HOME) / ".codefuse" / "fuse" / "skills"))
+cfuse_json = Path(HOME) / ".codefuse" / "fuse" / "codefuse.json"
+try:
+    cf_cfg = json.loads(cfuse_json.read_text()) if cfuse_json.exists() else {}
+except Exception:
+    cf_cfg = {}
+cf_servers = cf_cfg.setdefault("mcpServers", {})
+cf_servers[SERVER_NAME] = {
+    "command": MCP_BIN,
+    "args": [],
+    "env": {"SKILLS_DIR": CFUSE_DIR},
+}
+cfuse_json.parent.mkdir(parents=True, exist_ok=True)
+cfuse_json.write_text(json.dumps(cf_cfg, indent=2, ensure_ascii=False) + "\n")
+print(f"  registered in {cfuse_json} (CodeFuse format)")
+
 print()
-print("  Restart Claude Code / OpenCode / Codex to activate the new MCP tool.")
+print("  Restart Claude Code / OpenCode / Codex / CodeFuse to activate the new MCP tool.")
 print("  After restart, the agent sees a native `skill_manage` tool with 6 actions.")
 PYEOF
 }
@@ -411,6 +627,21 @@ if p.exists():
     if new_text != text:
         p.write_text(new_text)
         print(f"  removed MCP server from {p}")
+
+# CodeFuse: codefuse.json
+p = Path("${HOME}/.codefuse/fuse/codefuse.json")
+if p.exists():
+    try:
+        cfg = json.loads(p.read_text())
+        servers = cfg.get("mcpServers", {})
+        if SERVER_NAME in servers:
+            del servers[SERVER_NAME]
+            if not servers:
+                cfg.pop("mcpServers", None)
+            p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+            print(f"  removed MCP server from {p}")
+    except Exception:
+        pass
 PYEOF
 }
 
@@ -434,7 +665,7 @@ PATH
 
 if [[ "${UNINSTALL}" -eq 1 ]]; then
   echo ">> Uninstalling skill system"
-  for cli in claude-code opencode codex; do
+  for cli in claude-code opencode codex codefuse; do
     run_or_all "${cli}" && uninstall_cli "${cli}"
   done
   echo ""
@@ -470,7 +701,7 @@ fi
 chmod +x "${SYSTEM_ROOT}"/bin/* "${SYSTEM_ROOT}"/hooks/*.sh 2>/dev/null || true
 
 # Install per CLI
-for cli in claude-code opencode codex; do
+for cli in claude-code opencode codex codefuse; do
   run_or_all "${cli}" && install_cli "${cli}"
 done
 

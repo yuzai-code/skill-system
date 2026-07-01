@@ -150,12 +150,12 @@ def cmd_doctor(args) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Skill system CLI")
-    parser.add_argument("--cli", choices=["claude-code", "opencode", "codex"])
+    parser.add_argument("--cli", choices=["claude-code", "opencode", "codex", "codefuse"])
 
     sub = subparsers = parser.add_subparsers(dest="cmd", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--cli", choices=["claude-code", "opencode", "codex"])
+    common.add_argument("--cli", choices=["claude-code", "opencode", "codex", "codefuse"])
 
     p_list = sub.add_parser("list", help="list skills", parents=[common])
     p_list.set_defaults(func=cmd_list)
@@ -165,13 +165,13 @@ def main() -> int:
     p_view.set_defaults(func=cmd_view)
 
     p_init = sub.add_parser("init", help="install CLI config files", parents=[common])
-    p_init.add_argument("cli_target", nargs="?", choices=["claude-code", "opencode", "codex"])
+    p_init.add_argument("cli_target", nargs="?", choices=["claude-code", "opencode", "codex", "codefuse"])
     p_init.add_argument("--force", action="store_true")
     p_init.set_defaults(func=cmd_init)
 
     p_sync = sub.add_parser("sync", help="sync skills between CLIs", parents=[common])
-    p_sync.add_argument("from_cli", choices=["claude-code", "opencode", "codex"])
-    p_sync.add_argument("to_cli", choices=["claude-code", "opencode", "codex"])
+    p_sync.add_argument("from_cli", choices=["claude-code", "opencode", "codex", "codefuse"])
+    p_sync.add_argument("to_cli", choices=["claude-code", "opencode", "codex", "codefuse"])
     p_sync.add_argument("--force", action="store_true")
     p_sync.set_defaults(func=cmd_sync)
 

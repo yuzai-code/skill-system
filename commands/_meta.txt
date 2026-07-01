@@ -1,5 +1,5 @@
 """
-Skill System — Hermes-style procedural memory for the three CLIs.
+Skill System — Hermes-style procedural memory for four CLIs.
 
 Install:  bash ~/.skill-system/install.sh
 Uninstall: bash ~/.skill-system/install.sh --uninstall
@@ -9,11 +9,13 @@ CLI integration:
   Claude Code : ~/.claude/CLAUDE.md + ~/.claude/settings.json hooks
   OpenCode    : ~/.config/opencode/instructions.md + ~/.config/opencode/commands/
   Codex       : ~/.codex/AGENTS.md + ~/.codex/prompts/
+  CodeFuse    : ~/.codefuse/fuse/CODEFUSE.md + ~/.codefuse/fuse/commands/
 
 Skill storage: per-CLI (each keeps its own skills/).
   Claude Code : ~/.claude/skills/
   OpenCode    : ~/.config/opencode/skills/
   Codex       : ~/.codex/skills/
+  CodeFuse    : ~/.codefuse/fuse/skills/
 
 Shared code:  ~/.skill-system/lib/
 

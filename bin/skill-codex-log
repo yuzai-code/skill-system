@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""skill-codex-log — append a Codex on_tool_call event to the capture log.
+
+Called by Codex hooks.json (on_tool_call / on_error) with --tool <name>
+and optionally --error. Each call appends one JSON line to
+~/.skill-system/state/codex_tool.log; on_task_complete later feeds that
+log to `skill-profile --from-log` for evaluation.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+SYSTEM_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(SYSTEM_ROOT))
+
+from lib.adapters.codex import append_tool_event  # noqa: E402
+
+
+def main() -> int:
+    tool = ""
+    error = False
+    it = iter(sys.argv[1:])
+    for tok in it:
+        if tok == "--tool":
+            tool = next(it, "")
+        elif tok == "--error":
+            error = True
+        elif tok == "--no-error":
+            error = False
+        elif tok in ("-h", "--help"):
+            print(__doc__)
+            return 0
+        else:
+            # ignore unknown flags (Codex may pass extra placeholders)
+            pass
+    if not tool:
+        print("error: --tool required", file=sys.stderr)
+        return 2
+    try:
+        append_tool_event(tool, error=error)
+    except OSError as e:
+        print(f"error: cannot append to log: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
