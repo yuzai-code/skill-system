@@ -63,15 +63,15 @@ def section(name: str) -> None:
 
 def test_yaml_mini() -> None:
     section("yaml_mini — frontmatter parsing")
-    fm = yaml_mini.parse("name: foo\ndescription: A test.\nversion: 0.1.0\nauthor: hermes-skill-system\n")
+    fm = yaml_mini.parse("name: foo\ndescription: A test.\nversion: 0.1.0\nauthor: skill-system\n")
     assert fm["name"] == "foo", fm
     ok("simple key:value parsing")
     fm = yaml_mini.parse("platforms: [macos, linux]\ntags: [a, b, c]\n")
     assert fm["platforms"] == ["macos", "linux"], fm
     assert fm["tags"] == ["a", "b", "c"], fm
     ok("inline list parsing")
-    fm = yaml_mini.parse("metadata:\n  hermes:\n    tags: [x, y]\n")
-    assert fm["metadata"]["hermes"]["tags"] == ["x", "y"], fm
+    fm = yaml_mini.parse("metadata:\n  extra:\n    tags: [x, y]\n")
+    assert fm["metadata"]["extra"]["tags"] == ["x", "y"], fm
     ok("nested dict parsing")
     fm = yaml_mini.extract("---\nname: x\n---\nbody text")
     assert fm["name"] == "x"
@@ -106,7 +106,7 @@ def test_schema() -> None:
         "name: test-skill\n"
         "description: Short desc.\n"
         "version: 0.1.0\n"
-        "author: hermes-skill-system\n"
+        "author: skill-system\n"
         "---\n\n# Test\n\nBody.\n"
     )
     parsed, body = schema.validate_frontmatter(valid)
@@ -120,12 +120,12 @@ def test_schema() -> None:
     except schema.ValidationError as e:
         assert "60" in str(e)
     ok("rejects description > 60 chars (HARD CONSTRAINT)")
-    wrong_author = valid.replace("hermes-skill-system", "os.getlogin()")
+    wrong_author = valid.replace("skill-system", "os.getlogin()")
     try:
         schema.validate_frontmatter(wrong_author)
         fail("should have rejected wrong author")
     except schema.ValidationError as e:
-        assert "hermes-skill-system" in str(e)
+        assert "skill-system" in str(e)
     ok("rejects non-canonical author (privacy)")
 
 
@@ -162,7 +162,7 @@ def test_skill_manage(tmp: Path) -> None:
         "name: e2e-test\n"
         "description: End-to-end test skill.\n"
         "version: 0.1.0\n"
-        "author: hermes-skill-system\n"
+        "author: skill-system\n"
         "---\n\n# E2E Test\n\n## When to Use\n- test\n- validate\n"
     )
     r = skill_manage.skill_manage("create", "e2e-test", content=content)
@@ -218,7 +218,7 @@ def test_skill_manage(tmp: Path) -> None:
     assert (tmp / "e2e-test" / "SKILL.md").exists()
     ok("restore from archive")
 
-    bad_content = content.replace("hermes-skill-system", "yuzai")
+    bad_content = content.replace("skill-system", "yuzai")
     r = skill_manage.skill_manage("create", "bad-author", content=bad_content)
     assert not r["success"]
     assert "author" in r["error"].lower()
@@ -256,7 +256,7 @@ def test_curator(tmp: Path) -> None:
     skill_manage.configure(tmp)
     content = (
         "---\nname: c1\ndescription: C1.\nversion: 0.1.0\n"
-        "author: hermes-skill-system\n---\n\n# C1\n\n## When to Use\n- x\n"
+        "author: skill-system\n---\n\n# C1\n\n## When to Use\n- x\n"
     )
     skill_manage.skill_manage("create", "c1", content=content)
     skill_manage.skill_manage("create", "c2", content=content.replace("c1", "c2"))
@@ -311,7 +311,7 @@ def test_index(tmp: Path) -> None:
     skill_manage.configure(tmp)
     content = (
         "---\nname: idx-test\ndescription: Index test skill.\nversion: 0.1.0\n"
-        "author: hermes-skill-system\n---\n\n# Idx\n\n## When to Use\n- foo\n- bar\n"
+        "author: skill-system\n---\n\n# Idx\n\n## When to Use\n- foo\n- bar\n"
     )
     skill_manage.skill_manage("create", "idx-test", content=content)
     items = skill_index.build_index(tmp)
@@ -332,15 +332,15 @@ def test_preprocess(tmp: Path) -> None:
     section("skill_preprocess — template vars + inline shell")
     os.environ["SKILL_TEMPLATE_VARS"] = "true"
     os.environ["SKILL_INLINE_SHELL"] = "false"
-    content = "Path: ${HERMES_SKILL_DIR}/scripts/run.sh"
+    content = "Path: ${SKILL_DIR}/scripts/run.sh"
     out = skill_preprocess.preprocess(content, skill_dir=tmp, session_id="abc-123")
     assert str(tmp) in out
     assert "/scripts/run.sh" in out
-    ok("template vars resolve ${HERMES_SKILL_DIR}")
+    ok("template vars resolve ${SKILL_DIR}")
 
-    content = "Unresolved: ${HERMES_UNKNOWN}\n"
+    content = "Unresolved: ${SKILL_UNKNOWN}\n"
     out = skill_preprocess.preprocess(content, skill_dir=tmp)
-    assert "${HERMES_UNKNOWN}" in out
+    assert "${SKILL_UNKNOWN}" in out
     ok("unknown tokens left in place for debugging")
 
     os.environ["SKILL_INLINE_SHELL"] = "true"
@@ -360,7 +360,7 @@ def test_cli(tmp: Path) -> None:
     content_path = tmp / "_content.md"
     content_path.write_text(
         "---\nname: cli-test\ndescription: CLI test.\nversion: 0.1.0\n"
-        "author: hermes-skill-system\n---\n\n# CLI Test\n\n## When to Use\n- cli\n"
+        "author: skill-system\n---\n\n# CLI Test\n\n## When to Use\n- cli\n"
     )
     import subprocess
     r = subprocess.run(

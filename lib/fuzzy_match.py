@@ -1,6 +1,6 @@
 """Fuzzy find-and-replace — whitespace/indent tolerant.
 
-Hermes-style: handles whitespace normalization, indentation differences,
+Handles whitespace normalization, indentation differences,
 escape sequences, and block-anchor matching. Saves the agent from exact-match
 failures on minor formatting mismatches.
 """

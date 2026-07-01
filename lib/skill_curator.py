@@ -193,7 +193,7 @@ def run_consolidation(skills_dir: Path) -> dict[str, Any]:
     """LLM consolidation pass — opt-in, off by default.
 
     Stub. Real impl would call the main LLM with the umbrella-building
-    prompt (from Hermes CURATOR_REVIEW_PROMPT) and 3-source classification.
+    prompt and 3-source classification.
     """
     if not DEFAULT_CONSOLIDATE and not os.environ.get("SKILL_CONSOLIDATE"):
         return {
@@ -202,7 +202,7 @@ def run_consolidation(skills_dir: Path) -> dict[str, Any]:
         }
     return {
         "ran": False,
-        "reason": "LLM consolidation not yet implemented; use Hermes-style umbrella prompt.",
+        "reason": "LLM consolidation not yet implemented; use umbrella prompt.",
     }
 
 

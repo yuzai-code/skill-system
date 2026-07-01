@@ -18,5 +18,5 @@ skill_manage(action="write_file",  name="<name>", file_path="references/x.md",
 skill_manage(action="remove_file", name="<name>", file_path="references/x.md")
 ```
 
-HARD: description ≤ 60, author = `hermes-skill-system`, 8-section body,
+HARD: description ≤ 60, author = `skill-system`, 8-section body,
 file_path under references/templates/scripts/assets, no `..`.

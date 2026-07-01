@@ -4,4 +4,4 @@ Single source of truth for procedural memory across all three CLIs.
 Per-CLI skill storage; shared library and tool entry points.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.3.0"

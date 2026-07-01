@@ -29,11 +29,10 @@ leaks identity on shared skills).
 name: <slug>                    # kebab-case, ≤64 chars, ^[a-z0-9][a-z0-9._-]*$
 description: <one sentence>     # HARD: ≤60 characters (HARDLINE — see below)
 version: 0.1.0                 # semver
-author: hermes-skill-system     # literal value, NEVER environment identity
+author: skill-system     # literal value, NEVER environment identity
 platforms: [macos, linux]       # optional, only if OS-bound primitive
 metadata:
-  hermes:
-    tags: [Tag1, Tag2]
+  tags: [Tag1, Tag2]
 ---
 ```
 
@@ -48,7 +47,7 @@ Bad (123):  A comprehensive skill that lets the agent search arXiv
             for academic papers using keywords, authors, and categories.
 ```
 
-**author = `hermes-skill-system` literally.** Never `os.getlogin()`,
+**author = `skill-system` literally.** Never `os.getlogin()`,
 `git config user.name`, or anything you can probe. Skills get shared and
 published; an environment-derived name is a privacy leak the user never
 opted into.
@@ -67,7 +66,7 @@ Omit the field for portable skills.
 3. `## Prerequisites`
    Exact env vars, install steps, credentials needed
 4. `## How to Run`
-   Canonical invocation, framed through Hermes tools (`read_file`,
+   Canonical invocation, framed through wrapped tools (`read_file`,
    `search_files`, `patch`, `web_extract`, `write_file`, `terminal`)
 5. `## Quick Reference`
    Flat command/endpoint list, no narration
@@ -106,8 +105,8 @@ referenced by relative path. The prose still names the wrapped tool.
 
 ### Dynamic syntax (optional, opt-in)
 
-- `${HERMES_SKILL_DIR}` → replaced with the skill's absolute path at load.
-- `${HERMES_SESSION_ID}` → session ID if available.
+- `${SKILL_DIR}` → replaced with the skill's absolute path at load.
+- `${SKILL_SESSION_ID}` → session ID if available.
 - `!`shell-cmd`` → runs the command at load, replaces with stdout. **Off
   by default** for security. Must be enabled via `SKILL_INLINE_SHELL=1`.
 

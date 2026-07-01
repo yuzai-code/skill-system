@@ -31,7 +31,7 @@ def _import_skill_manage():
 
 
 SERVER_INFO = {
-    "name": "hermes-skill-system",
+    "name": "skill-system",
     "version": "1.0.0",
 }
 
@@ -55,7 +55,7 @@ TOOL_DEFINITION: Dict[str, Any] = {
         "  - description MUST be ≤60 characters. The system-prompt skill index "
         "truncates at 60 and loads every session — anything past char 60 is "
         "silently cut and never routes. COUNT chars before saving.\n"
-        "  - author MUST equal literal 'hermes-skill-system'. Never use OS "
+        "  - author MUST equal literal 'skill-system'. Never use OS "
         "username or git config — skills get shared/published; environment "
         "identity is a privacy leak.\n"
         "  - body MUST have all 8 sections: When to Use / Prerequisites / "
@@ -91,7 +91,7 @@ TOOL_DEFINITION: Dict[str, Any] = {
                     "Full SKILL.md content for create/edit. MUST include YAML "
                     "frontmatter (--- name / description / version / author ---) "
                     "and an 8-section body. Description ≤60 chars; "
-                    "author = 'hermes-skill-system'."
+                    "author = 'skill-system'."
                 ),
             },
             "category": {
@@ -221,6 +221,15 @@ def _handle_tool_call(
         })
 
     is_error = not result.get("success", False)
+    # On a successful create, advance the offer-gate cooldown (WAITING->COOLDOWN)
+    # so we don't re-offer in the same session after the user already saved.
+    if not is_error and action == "create":
+        try:
+            from lib import offer_gate, paths
+            cli = paths.detect_active_cli()
+            offer_gate.record_create(cli)
+        except Exception:  # best-effort; never break the tool response
+            pass
     text = json.dumps(result, ensure_ascii=False, indent=2)
     return _ok(req_id, {
         "content": [{"type": "text", "text": text}],

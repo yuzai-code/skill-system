@@ -1,6 +1,59 @@
 # Changelog
 
-All notable changes to hermes-skill-system.
+All notable changes to skill-system.
+
+## [1.3.0] - 2026-06-30
+
+### Added — Automatic skill capture (left-half of the loop)
+
+- **Core (CLI-agnostic)**:
+  - `lib/session_profile.py`: portable `SessionProfile` schema (v1) +
+    `SessionProfileBuilder` for streaming adapters. Tracks tool_calls,
+    distinct_tools, errors, error_recoveries (same-tool-after-error
+    heuristic), user_corrections, turns.
+  - `lib/offer_gate.py`: 4 threshold rules (env-overridable) +
+    cooldown state machine (`IDLE → WAITING → COOLDOWN → IDLE`) +
+    `pause`/`resume`. Per-agent_tool isolation. Anti-nag: one offer per
+    session pattern within cooldown window.
+  - `lib/offer_message.py`: imperative injection fragment with quantified
+    reason; mandates "ask the user first, only create on explicit yes".
+  - `lib/offer_runner.py` + `bin/skill-profile` + `bin/skill-offer`: CLI
+    surface (`--from-stdin` / `--from-file` / `--from-json` / `--from-log`
+    / `--record-create` / `--status` / `--pause` / `--resume`).
+- **Adapters** (three CLIs, all first-class, no degraded path):
+  - `lib/adapters/claude_code.py`: parses Claude Code transcript JSONL into
+    a profile. `hooks/claude_code_stop.sh` rewired to collect → gate → emit
+    offer to Stop-hook stdout.
+  - `lib/adapters/codex.py` + `bin/skill-codex-log`: on_tool_call appends
+    to a log; `on_task_complete` runs `skill-profile --from-log`.
+    `plugins/codex/hooks.json.fragment` merged by installer.
+  - `plugins/opencode/skill-capture.js`: subscribes to
+    `tool.execute.after` + `session.idle`; emits offer via
+    `tui.prompt.append` (fallback: state file). Uses absolute path to
+    `skill-profile` so no PATH dependency.
+- **MCP integration**: `lib/mcp_server.py` calls `offer_gate.record_create()`
+  on a successful `skill_manage(create)`, advancing `WAITING → COOLDOWN`
+  so we don't re-offer in the same session after the user already saved.
+- **Tests**: `tests/test_capture.py` — 42 assertions covering schema
+  parse/validate, builder recovery heuristic, 4 gate rules + env override,
+  full cooldown state machine (incl. expiry + per-tool isolation),
+  pause/resume, message rendering, CLI end-to-end. Existing smoke + MCP
+  tests unchanged.
+
+### Changed
+
+- `commands/{claude-code,opencode,codex}/*`: removed the 3-line
+  "after complex tasks, save the approach" passive instruction. Replaced
+  with a note that skill-capture offers are injected automatically; the
+  agent no longer self-monitors task complexity in the common case.
+
+### Why this matters
+
+Before v1.3.0 the "auto-capture" half of the Hermes loop was 3 lines of
+system prompt hoping the model would remember to save skills. After
+v1.3.0 it is a real mechanism: a gate fires on quantified complexity, an
+offer is injected by the CLI's native hook, and the agent follows an
+imperative "ask first, create on yes" protocol. Cooldown prevents nag.
 
 ## [1.2.0] - 2026-06-30
 
@@ -115,7 +168,7 @@ native tool list.
 - `/learn` slash command is the primary path for skill creation
 - Agent offer after complex tasks is the secondary path
 - `description ≤ 60 chars` is a hard system constraint (longer never routes)
-- `author = "hermes-skill-system"` literal (privacy: never environment identity)
+- `author = "skill-system"` literal (privacy: never environment identity)
 - 8-section body structure enforced
 - Archive-not-delete (every delete is reversible)
 - Curator runs inactivity-triggered, not on cron

@@ -1,4 +1,4 @@
-"""SKILL.md schema validation. Enforces HARD constraints from Hermes spec.
+"""SKILL.md schema validation. Enforces HARD constraints.
 
 Hard rules (HARDLINE):
   - frontmatter must have name + description
@@ -23,7 +23,7 @@ MAX_CONTENT_CHARS = 100_000
 MAX_FILE_BYTES = 1_048_576
 
 VALID_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
-FORCE_AUTHOR = "hermes-skill-system"
+FORCE_AUTHOR = "skill-system"
 
 ALLOWED_SUBDIRS = {"references", "templates", "scripts", "assets"}
 

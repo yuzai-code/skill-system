@@ -26,7 +26,7 @@ skill_manage(action="remove_file", name="<name>", file_path="references/x.md")
 ## Hard rules (HARDLINE)
 
 - `description` ≤ 60 chars in any new frontmatter
-- `author` = `hermes-skill-system` (literal, never environment)
+- `author` = `skill-system` (literal, never environment)
 - 8-section body when creating
 - `delete` archives, never hard-deletes
 - `file_path` must start with `references/`, `templates/`, `scripts/`,

@@ -23,17 +23,16 @@ Then author ONE SKILL.md via `skill_manage(action="create")`.
 name: <slug>                    # kebab-case, ≤64 chars
 description: <one sentence>     # HARD: ≤60 characters
 version: 0.1.0
-author: hermes-skill-system     # literal value, NEVER environment identity
+author: skill-system     # literal value, NEVER environment identity
 platforms: [macos, linux]       # optional, OS-bound only
 metadata:
-  hermes:
-    tags: [Tag1, Tag2]
+  tags: [Tag1, Tag2]
 ---
 ```
 
 **description ≤ 60 characters** — system index truncates; longer never routes.
 
-**author = `hermes-skill-system`** — never OS username or git config;
+**author = `skill-system`** — never OS username or git config;
 privacy: skills get shared and published.
 
 **platforms** only when OS-bound primitive required. Prefer cross-platform.
@@ -69,8 +68,8 @@ privacy: skills get shared and published.
 
 ### Dynamic syntax (opt-in)
 
-- `${HERMES_SKILL_DIR}` → absolute path of skill (default ON)
-- `${HERMES_SESSION_ID}` → session ID if available
+- `${SKILL_DIR}` → absolute path of skill (default ON)
+- `${SKILL_SESSION_ID}` → session ID if available
 - `!`shell-cmd`` → runs at load, replaces stdout (default OFF)
 
 ## When done

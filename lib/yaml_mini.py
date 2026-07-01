@@ -121,7 +121,7 @@ def _parse_list_item(
     key_of_list = _find_last_key_at(stack, indent)
     if key_of_list is None:
         raise FrontmatterError(f"line {lineno}: orphan list item")
-    if not isinstance(list_parent[key_of_list], list):
+    if key_of_list not in list_parent or not isinstance(list_parent[key_of_list], list):
         list_parent[key_of_list] = []
     item = raw.strip()[2:].strip()
     list_parent[key_of_list].append(_parse_scalar(item, lineno))

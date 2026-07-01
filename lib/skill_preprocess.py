@@ -1,8 +1,8 @@
 """SKILL.md preprocessing — template variables + inline shell.
 
 Template variables (default ON, safe — pure string substitution):
-  - ${HERMES_SKILL_DIR} → absolute path of skill directory
-  - ${HERMES_SESSION_ID} → session ID if available
+  - ${SKILL_DIR} → absolute path of skill directory
+  - ${SKILL_SESSION_ID} → session ID if available
 
 Inline shell (default OFF — opt-in, security risk):
   - !`command` → runs `command` with cwd=skill_dir, replaces with stdout
@@ -13,6 +13,9 @@ Both are configurable via env vars:
   SKILL_TEMPLATE_VARS=true|false   (default true)
   SKILL_INLINE_SHELL=true|false     (default false)
   SKILL_INLINE_SHELL_TIMEOUT=10     (seconds)
+
+Backward compat: ${HERMES_SKILL_DIR} and ${HERMES_SESSION_ID} still work
+as aliases, mapped to the new names.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_SKILL_TEMPLATE_RE = re.compile(r"\$\{(HERMES_SKILL_DIR|HERMES_SESSION_ID)\}")
+_SKILL_TEMPLATE_RE = re.compile(r"\$\{(SKILL_DIR|SKILL_SESSION_ID|HERMES_SKILL_DIR|HERMES_SESSION_ID)\}")
 _INLINE_SHELL_RE = re.compile(r"!`([^`\n]+)`")
 _INLINE_SHELL_MAX_OUTPUT = 4000
 
@@ -53,8 +56,9 @@ def substitute_template_vars(
     skill_dir: Optional[Path],
     session_id: Optional[str],
 ) -> str:
-    """Replace ${HERMES_SKILL_DIR} and ${HERMES_SESSION_ID} tokens.
+    """Replace ${SKILL_DIR} and ${SKILL_SESSION_ID} tokens.
 
+    Also supports legacy ${HERMES_SKILL_DIR} / ${HERMES_SESSION_ID} as aliases.
     Unresolved tokens are left as-is so the author can debug them.
     """
     if not content:
@@ -63,9 +67,9 @@ def substitute_template_vars(
 
     def _replace(m: re.Match) -> str:
         token = m.group(1)
-        if token == "HERMES_SKILL_DIR" and skill_dir_str:
+        if token in ("SKILL_DIR", "HERMES_SKILL_DIR") and skill_dir_str:
             return skill_dir_str
-        if token == "HERMES_SESSION_ID" and session_id:
+        if token in ("SKILL_SESSION_ID", "HERMES_SESSION_ID") and session_id:
             return str(session_id)
         return m.group(0)
 

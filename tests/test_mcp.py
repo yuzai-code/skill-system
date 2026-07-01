@@ -84,7 +84,7 @@ def test_initialize(client: MCPClient) -> None:
         "capabilities": {},
     })
     assert r.get("jsonrpc") == "2.0", r
-    assert r.get("result", {}).get("serverInfo", {}).get("name") == "hermes-skill-system"
+    assert r.get("result", {}).get("serverInfo", {}).get("name") == "skill-system"
     assert "tools" in r.get("result", {}).get("capabilities", {})
     ok("initialize handshake (serverInfo + capabilities)")
 
@@ -103,7 +103,7 @@ def test_tools_list(client: MCPClient) -> None:
     assert t["name"] == "skill_manage"
     desc = t["description"]
     assert "60 characters" in desc, "description must mention 60-char limit"
-    assert "hermes-skill-system" in desc, "description must mention required author"
+    assert "skill-system" in desc, "description must mention required author"
     assert "When to Use" in desc, "description must mention 8 sections"
     schema = t["inputSchema"]
     assert "action" in schema["properties"]
@@ -121,7 +121,7 @@ def test_create_skill(client: MCPClient, tmp: Path) -> None:
         "name: mcp-test\n"
         "description: MCP end-to-end test skill.\n"
         "version: 0.1.0\n"
-        "author: hermes-skill-system\n"
+        "author: skill-system\n"
         "---\n\n# MCP Test\n\n## When to Use\n- mcp\n- test\n"
     )
     r = client.call("tools/call", {
@@ -146,7 +146,7 @@ def test_create_rejects_61_char_desc(client: MCPClient) -> None:
         f"name: bad-desc-mcp\n"
         f"description: {long_desc}\n"
         "version: 0.1.0\n"
-        "author: hermes-skill-system\n"
+        "author: skill-system\n"
         "---\n\n# Bad\n\n## When to Use\n- x\n"
     )
     r = client.call("tools/call", {
@@ -174,7 +174,7 @@ def test_create_rejects_bad_author(client: MCPClient) -> None:
     })
     assert r["result"]["isError"] is True
     text = json.loads(r["result"]["content"][0]["text"])
-    assert "hermes-skill-system" in text["error"]
+    assert "skill-system" in text["error"]
     ok("tools/call rejects non-canonical author with isError=true")
 
 
